@@ -13,8 +13,8 @@ FUNCTION      = mac
 $(FUNCTION).v: $(FUNCTION).cpp $(FUNCTION).tcl 
 	rm -rf $(CRUFT)_
 	$(CAT) $(CAT_FLAGS) -file $(FUNCTION).tcl
-	cp Catapult/mac.v1/concat_rtl.v $(FUNCTION).v
-	cp Catapult/mac.v1/rtl_csr_wrapper.v $(FUNCTION)_wrapper.v
+	cp Catapult/$(FUNCTION).v1/concat_rtl.v $(FUNCTION).v
+	cp Catapult/$(FUNCTION).v1/rtl_csr_wrapper.v $(FUNCTION)_wrapper.v
 
 clean:
 	rm -rf $(CRUFT)

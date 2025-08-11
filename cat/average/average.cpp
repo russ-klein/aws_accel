@@ -2,14 +2,14 @@
 #include <ac_int.h>
 #include <ac_channel.h>
 #include <mc_scverify.h>
-#include <axi_interface.h>
+#include <axi_master_if.h>
 
 typedef ac_int<23, true> num_t;
 typedef axi_address_type addr_t;
 
 #pragma busifc_cfg slave_0 DataWidth=64 BaseAddress=0 Protocol=axi4lite
 #pragma hls_design top
-void average(num_t count, addr_t index, num_t &result, axi_bus memory)
+void average(num_t count, addr_t index, num_t &result, axi_master_interface &memory)
 {
 #pragma busifc count    WordOffset=0 Slave=slave_0
 #pragma busifc index    WordOffset=1 Slave=slave_0
@@ -25,6 +25,7 @@ void average(num_t count, addr_t index, num_t &result, axi_bus memory)
      sum += n;
    }
 
-   return sum/count;
+   // result = sum / count
+   result = sum >> 5;
 }
 

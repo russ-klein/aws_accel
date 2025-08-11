@@ -20,14 +20,28 @@ ac_int<SIZE_BITS, false>  axi_master_interface::encode_size(const int n)
 
 ac_int<BYTE_BITS, false>  axi_master_interface::encode_strb(const int n, ac_int<BUS_BITS, false> low_bits)
 {
-   if (n ==    8)     return (0x01 << low_bits);
-   if (n ==   16)     return (0x03 << low_bits);
-   if (n ==   32)     return (0x0F << low_bits);
-   if (n ==   64)     return (0xFF << low_bits);
-   // if (n == 128)  return (0xFFFF << low_bits);
-   // if (n == 256)  return (0xFFFFFFFF << low_bits);
-   // if (n == 512)  return (0xFFFFFFFFFFFFFFFF << low_bits);
-   // if (n == 1024) return (0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF << low_bits);
+   if (n ==    8)    return ((ac_int<BYTE_BITS, false>) 0x01 << low_bits);
+#if (BYTE_BITS > 1)
+   if (n ==   16)    return ((ac_int<BYTE_BITS, false>) 0x03 << low_bits);
+#if (BYTE_BITS > 2)
+   if (n ==   32)    return ((ac_int<BYTE_BITS, false>) 0x0F << low_bits);
+#if (BYTE_BITS > 4)
+   if (n ==   64)    return ((ac_int<BYTE_BITS, false>) 0xFF << low_bits);
+#if (BYTE_BITS > 8)
+   if (n ==  128)    return ((ac_int<BYTE_BITS, false>) 0xFFFF << low_bits);
+#if (BYTE_BITS > 16)
+   if (n ==  256)    return ((ac_int<BYTE_BITS, false>) 0xFFFFFFFF << low_bits);
+#if (BYTE_BITS > 32)
+   if (n ==  512)    return ((ac_int<BYTE_BITS, false>) 0xFFFFFFFFFFFFFFFF << low_bits);
+#if (BYTE_BITS > 64)
+   if (n == 1024)    return ((ac_int<BYTE_BITS, false>) 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF << low_bits);
+#endif
+#endif
+#endif
+#endif
+#endif
+#endif
+#endif
    return 0;
 }
 
@@ -70,6 +84,8 @@ axi_data_type axi_master_interface::csim_memory_read(axi_address_type address, i
 {
    unsigned char byte_value;
 
+   assert (size <= STRIDE);
+
    axi_data_type ret = (axi_data_type) 0;
 
    if (aligned) {
@@ -78,9 +94,9 @@ axi_data_type axi_master_interface::csim_memory_read(axi_address_type address, i
        for (int bit=0; bit<8; bit++) ret[byte * 8 + bit] = (byte_value >> bit) & 1;
      } 
    } else {
-     int offset = address & ADDR_LOW_BITS_MASK;
+     const unsigned long long offset = ((unsigned long long) address) & ADDR_LOW_BITS_MASK;
      for (int byte=offset; byte<offset + size; byte++) {
-       byte_value = memory_store_byte_read(address - offset + byte);
+       byte_value = memory_store_byte_read(((unsigned long long) address) - offset + byte);
        for (int bit=0; bit<8; bit++) ret[byte * 8 + bit] = (byte_value >> bit) & 1;
      }
    }
@@ -91,14 +107,16 @@ axi_data_type axi_master_interface::csim_memory_read(axi_address_type address, i
 
 void axi_master_interface::csim_memory_write(axi_address_type address, int size, axi_data_type data)
 {
+   assert (size <= STRIDE);
+
    if (aligned) {
      for (int byte=0; byte<size; byte++) {
        memory_store_byte_write((long) address + byte, data.slc<8>(byte*8));
      }
    } else {
-     int offset = address & ADDR_LOW_BITS_MASK;
+     const unsigned long long offset = ((unsigned long long) address) & ADDR_LOW_BITS_MASK;
      for (int byte=offset; byte<offset + size; byte++) {
-       memory_store_byte_write(address-offset + byte, data.slc<8>(byte*8));
+       memory_store_byte_write(((unsigned long long) address) - offset + byte, data.slc<8>(byte*8));
      }
    }
 }
@@ -114,11 +132,10 @@ void axi_master_interface::tb_memory_read(long long address, int count, unsigned
 void axi_master_interface::send_ar(ar_payload &ar)
 {
 #ifdef C_SIMULATION
-   csim_r_address = ar.address;
-   csim_r_size    = (1<<ar.size);
-   csim_r_count   = ar.len + 1;
-   csim_r_id      = ar.id;
-printf("read address: %08x size: %d count: %d \n", csim_r_address, csim_r_size, csim_r_count);
+   csim_r_address = ar.address;       // byte address
+   csim_r_size    = (1 << ar.size);   // bytes per beat
+   csim_r_count   = ar.len + 1;       // number of beats
+   csim_r_id      = ar.id;            
 #else
    channels.ar_channel.write(ar);
 #endif
@@ -128,7 +145,6 @@ void axi_master_interface::get_r(r_payload &r)
 {
 #ifdef C_SIMULATION
    r.data = csim_memory_read(csim_r_address, csim_r_size);
-printf("read address: %08x data: %08x %08x \n", csim_r_address, (r.data >> 32).to_int() & 0xFFFFFFFF, r.data.to_int() & 0xFFFFFFFF);
    r.last = csim_r_count == 1;
    r.resp = 0;
    r.id   = csim_r_id;
@@ -146,7 +162,6 @@ void axi_master_interface::send_aw(aw_payload &aw)
    csim_w_size    = (1<<aw.size);
    csim_w_count   = aw.len + 1;
    csim_w_id      = aw.id;
-printf("write address: %08x size: %d count: %d \n", csim_w_address, csim_w_size, csim_w_count);
 #else
    channels.aw_channel.write(aw);
 #endif
@@ -156,7 +171,6 @@ void axi_master_interface::send_w(w_payload &w)
 {
 #ifdef C_SIMULATION
    csim_memory_write(csim_w_address, csim_w_size, w.data);
-printf("write address: %08x data: %08x %08x \n", csim_w_address, (w.data >> 32).to_int() & 0xFFFFFFFF, w.data.to_int() & 0xFFFFFFFF);
    w.last = csim_w_count == 1;
    csim_w_count--;
    csim_w_address += csim_w_size;
@@ -369,7 +383,7 @@ axi_resp_type axi_master_interface::axi_burst_write_base(
    send_aw(aw);
  
    beat = 0;
-   w.strb = 0xFFFFFFFF;
+   w.strb = -1; // 0xFFFFFFFF;
 
   #pragma hls_pipeline_init_interval 1
    data_beat_loop: for (int beat=0; ; beat++) {
@@ -515,13 +529,13 @@ axi_resp_type axi_master_interface::axi_burst_write_real_base(
    const ac_int<LEN_BITS, false> max_burst_len = (((ac_int<LEN_BITS, false>) 0) - 1);  // defines maximum possible bust size
                                                           // if count is greater transfer is broken up into multiple bursts
                                               
-   const axi_address_type first_line      = (address & address_mask);                                    // byte address of first line to write
-   const axi_address_type last_line       = ((address + (count * (size/WORD_SIZE)) - 1) & address_mask);                      // byte address of last line to write
-   const bool start_aligned  = (address == first_line);
-   const bool end_aligned    = (((address + count) & ADDR_LOW_BITS_MASK) == 0);
-   const int lines           = (((last_line >> BUS_BITS) - (first_line >> BUS_BITS)) + 1);  // number of lines in the transfer             
-   const int start_delta     = address - first_line;                                   
-   const int end_delta       = ((1 << BUS_BITS) - 1) - ((address + (count * (size/WORD_SIZE)) - 1) & ADDR_LOW_BITS_MASK);
+   const axi_address_type first_line  = (address & address_mask);                                    // byte address of first line to write
+   const axi_address_type last_line   = ((address + (count * (size/WORD_SIZE)) - 1) & address_mask);                      // byte address of last line to write
+   const bool start_aligned           = (address == first_line);
+   const bool end_aligned             = (((address + count) & ADDR_LOW_BITS_MASK) == 0);
+   const axi_size_type lines          = (axi_size_type) (((last_line >> BUS_BITS) - (first_line >> BUS_BITS)) + 1);  // number of lines in the transfer             
+   const axi_size_type start_delta    = (axi_size_type) (address - first_line);                                   
+   const axi_size_type end_delta      = (axi_size_type) (((1 << BUS_BITS) - 1) - ((address + (count * (size/WORD_SIZE)) - 1) & ADDR_LOW_BITS_MASK));
 
    axi_size_type burst_count = 0;
    axi_size_type sent        = 0;
@@ -614,7 +628,7 @@ axi_resp_type axi_master_interface::axi_burst_write_real_base(
    
    return b.resp;
 }
-/*
+
 
 template <typename datatype, int size>
 axi_resp_type axi_master_interface::axi_burst_read_base(
@@ -651,14 +665,13 @@ axi_resp_type axi_master_interface::axi_burst_read_base(
      // if (beat == ar.len) break;
    }
 
+   ac::wait();
    return r.resp;
 }
 
-
-*/
+/*
 template <typename datatype, int size> 
-//axi_resp_type axi_master_interface::axi_burst_read_base_complete(
-axi_resp_type axi_master_interface::axi_burst_read_base(
+axi_resp_type axi_master_interface::axi_burst_read_base_complete(
        axi_address_type   address,
        datatype          *data_in,
        axi_size_type      count)
@@ -732,43 +745,38 @@ axi_resp_type axi_master_interface::axi_burst_read_base(
 
       // channels.ar_channel.write(ar);
       send_ar(ar);
-
+printf("burst_size: %d \n", burst_size);
      #pragma hls_pipeline_init_interval 1
       for (int beat=0; beat<burst_size+1; beat++) {
 
          datatype t[(BUS_SIZE/size)*2];
-
+printf("bus_size; %d size: %d size of t: %d \n", BUS_SIZE, size, (BUS_SIZE/size)*2);
          // r = channels.r_channel.read();
          get_r(r);
 
          delta = first ? start_delta : 0;
          axi_size_type offset = (received - delta) & (axi_size_type) 0xFFF8;
-
+printf("offset after init: %d \n", offset);
         #pragma hls_unroll
-         data_load: for (ac_int<16, false> i=0; i<(BUS_SIZE/size); i++) {   // to do, make divide a shift operation
-printf(">>>i=%d  BUS_SIZE=%d, WORD_SIZE=%d size=%d \n", i, BUS_SIZE, WORD_SIZE, size);
+         data_load: for (ac_int<16, false> i=0; i<(BUS_SIZE/size); i++) {
             if (((base_word + i * (size/WORD_SIZE)) >= address) &&
                 ((base_word + i * (size/WORD_SIZE)) < address + (count * (size/WORD_SIZE)))) {
                   // data_in[i + offset] = r.data.slc<size>(i * size);
+printf("i>=start_delta: %s \n", (i>=start_delta) ? "true" : "false"); 
+printf("beat: %d i: %d start_delta: %d index_into_t: %d \n", beat, i, start_delta, beat+i-start_delta);
                   (i >= start_delta) ? t[beat + i - start_delta] = r.data.slc<size>(i * size) :
                                       t[beat + i - start_delta + (BUS_SIZE/size)] = r.data.slc<size>(i * size);
-
-printf("i=%d start_delta=%d \n", i, start_delta);
-if (i>=start_delta) {
-printf("t[%d] = %lx \n", beat+i-start_delta, r.data.slc<size>(i*size)); 
-printf("t[%d] = %lx \n", beat+i, t[beat+i]); }
-else printf("t[%d] = %d \n", beat+i-start_delta+(BUS_SIZE/size), r.data.slc<size>(i*size)); 
-
             }
          }
 
+		    // problem:  loop above has "beat", which exceeds the size of the array, core dump!!
+printf("offset[1] = %d \n", offset);
          if (start_delta > 0) {
             if (!first || (first && !last)) {
                // write data array
               #pragma hls_unroll
                for (int i=0; i<(BUS_SIZE/size); i++) {
                   data_in[i + offset] = t[i];
-//printf("data_in[%d] = t[%d] = %d \n", i+offset, i, t[i]);
                }
             }
 
@@ -780,6 +788,7 @@ else printf("t[%d] = %d \n", beat+i-start_delta+(BUS_SIZE/size), r.data.slc<size
             // write data array
            #pragma hls_unroll
             for (int i=0; i<(BUS_SIZE/size); i++) {
+printf("offset[2] = %d \n", offset);
                data_in[beat + i + offset] = t[i + beat];
             }
          }
@@ -798,11 +807,9 @@ else printf("t[%d] = %d \n", beat+i-start_delta+(BUS_SIZE/size), r.data.slc<size
       }
    } while (lines_received < lines);  
 
-for (int i=0; i<4; i++) printf("data = %08x %08x \n", (data_in[i]>>32).to_int(), (data_in[i]&0xFFFFFFFF).to_int());
-
    return r.resp;
 }
-
+*/
 
 
 
@@ -819,18 +826,18 @@ axi_resp_type axi_master_interface::axi_burst_read_real_base(
    const ac_int<LEN_BITS, false> max_burst_len = (((ac_int<LEN_BITS, false>) 0) - 1);  // defines maximum possible bust size
                                                           // if count is greater transfer is broken up into multiple bursts
                                               
-   const axi_address_type first_line      = (address & address_mask);                                    // byte address of first line to write
-   const axi_address_type last_line       = ((address + (count * (size/WORD_SIZE)) - 1) & address_mask);                      // byte address of last line to write
-   const bool start_aligned  = (address == first_line);
-   const bool end_aligned    = (((address + count) & ADDR_LOW_BITS_MASK) == 0);
-   const int lines           = (((last_line >> BUS_BITS) - (first_line >> BUS_BITS)) + 1);  // number of lines in the transfer             
-   const int start_delta     = address - first_line;                                   
-   const int end_delta       = ((1 << BUS_BITS) - 1) - ((address + (count * (size/WORD_SIZE)) - 1) & ADDR_LOW_BITS_MASK);
+   const axi_address_type first_line   = (address & address_mask);                                    // byte address of first line to write
+   const axi_address_type last_line    = ((address + (count * (size/WORD_SIZE)) - 1) & address_mask);                      // byte address of last line to write
+   const bool start_aligned            = (address == first_line);
+   const bool end_aligned              = (((address + count) & ADDR_LOW_BITS_MASK) == 0);
+   const axi_size_type lines           = (axi_size_type) (((last_line >> BUS_BITS) - (first_line >> BUS_BITS)) + 1);  // number of lines in the transfer             
+   const axi_size_type start_delta     = (axi_size_type) (address - first_line);                                   
+   const axi_size_type end_delta       = (axi_size_type) (((1 << BUS_BITS) - 1) - ((address + (count * (size/WORD_SIZE)) - 1) & ADDR_LOW_BITS_MASK));
 
-   const int all_words       = count;
-   const int first_words     = (STRIDE - start_delta) / (size/WORD_SIZE);
-   const int last_words      = (end_delta / (size/WORD_SIZE)==0) ? (STRIDE) / (size/WORD_SIZE) : end_delta / (size/WORD_SIZE);
-   const int full_bus        = (STRIDE) / (size/WORD_SIZE);
+   const axi_size_type all_words       = count;
+   const axi_size_type first_words     = (STRIDE - start_delta) / (size/WORD_SIZE);
+   const axi_size_type last_words      = (end_delta / (size/WORD_SIZE)==0) ? (axi_size_type) (( STRIDE) / (size/WORD_SIZE)) : (axi_size_type) (end_delta / (size/WORD_SIZE));
+   const axi_size_type full_bus        = (STRIDE) / (size/WORD_SIZE);
 
    axi_size_type words_moved;
    axi_size_type burst_count = 0;
@@ -954,6 +961,46 @@ axi_resp_type  axi_master_interface::read(axi_address_type address, axi_u64 &dat
    return axi_read_base<axi_u64, 64>(address, data_in);
 }
 
+axi_resp_type  axi_master_interface::read(axi_address_type address, axi_128 &data_in)
+{
+   return axi_read_base<axi_128, 128>(address, data_in);
+}
+
+axi_resp_type  axi_master_interface::read(axi_address_type address, axi_u128 &data_in)
+{
+   return axi_read_base<axi_u128, 128>(address, data_in);
+}
+
+axi_resp_type  axi_master_interface::read(axi_address_type address, axi_256 &data_in)
+{
+   return axi_read_base<axi_256, 256>(address, data_in);
+}
+
+axi_resp_type  axi_master_interface::read(axi_address_type address, axi_u256 &data_in)
+{
+   return axi_read_base<axi_u256, 256>(address, data_in);
+}
+
+axi_resp_type  axi_master_interface::read(axi_address_type address, axi_512 &data_in)
+{
+   return axi_read_base<axi_512, 512>(address, data_in);
+}
+
+axi_resp_type  axi_master_interface::read(axi_address_type address, axi_u512 &data_in)
+{
+   return axi_read_base<axi_u512, 512>(address, data_in);
+}
+
+axi_resp_type  axi_master_interface::read(axi_address_type address, axi_1024 &data_in)
+{
+   return axi_read_base<axi_1024, 1024>(address, data_in);
+}
+
+axi_resp_type  axi_master_interface::read(axi_address_type address, axi_u1024 &data_in)
+{
+   return axi_read_base<axi_u1024, 1024>(address, data_in);
+}
+
 axi_resp_type  axi_master_interface::read(axi_address_type address, axi_float &data_in)
 {
    return axi_read_real<axi_float, 32>(address, data_in);
@@ -1002,6 +1049,46 @@ axi_resp_type  axi_master_interface::write(axi_address_type address, axi_64 data
 axi_resp_type  axi_master_interface::write(axi_address_type address, axi_u64 data_out)
 {
    return axi_write_base<axi_u64, 64>(address, data_out);
+}
+
+axi_resp_type  axi_master_interface::write(axi_address_type address, axi_128 data_out)
+{
+   return axi_write_base<axi_128, 128>(address, data_out);
+}
+
+axi_resp_type  axi_master_interface::write(axi_address_type address, axi_u128 data_out)
+{
+   return axi_write_base<axi_u128, 128>(address, data_out);
+}
+
+axi_resp_type  axi_master_interface::write(axi_address_type address, axi_256 data_out)
+{
+   return axi_write_base<axi_256, 256>(address, data_out);
+}
+
+axi_resp_type  axi_master_interface::write(axi_address_type address, axi_u256 data_out)
+{
+   return axi_write_base<axi_u256, 256>(address, data_out);
+}
+
+axi_resp_type  axi_master_interface::write(axi_address_type address, axi_512 data_out)
+{
+   return axi_write_base<axi_512, 512>(address, data_out);
+}
+
+axi_resp_type  axi_master_interface::write(axi_address_type address, axi_u512 data_out)
+{
+   return axi_write_base<axi_u512, 512>(address, data_out);
+}
+
+axi_resp_type  axi_master_interface::write(axi_address_type address, axi_1024 data_out)
+{
+   return axi_write_base<axi_1024, 1024>(address, data_out);
+}
+
+axi_resp_type  axi_master_interface::write(axi_address_type address, axi_u1024 data_out)
+{
+   return axi_write_base<axi_u1024, 1024>(address, data_out);
 }
 
 axi_resp_type  axi_master_interface::write(axi_address_type address, axi_float data_out)
@@ -1054,6 +1141,46 @@ axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_u6
    return axi_burst_write_base<axi_u64, 64>(address, data, size);
 }
 
+axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_128  *data, axi_size_type size)
+{
+   return axi_burst_write_base<axi_128, 128>(address, data, size);
+}
+
+axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_u128 *data, axi_size_type size)
+{
+   return axi_burst_write_base<axi_u128, 128>(address, data, size);
+}
+
+axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_256  *data, axi_size_type size)
+{
+   return axi_burst_write_base<axi_256, 256>(address, data, size);
+}
+
+axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_u256 *data, axi_size_type size)
+{
+   return axi_burst_write_base<axi_u256, 256>(address, data, size);
+}
+
+axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_512  *data, axi_size_type size)
+{
+   return axi_burst_write_base<axi_512, 512>(address, data, size);
+}
+
+axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_u512 *data, axi_size_type size)
+{
+   return axi_burst_write_base<axi_u512, 512>(address, data, size);
+}
+
+axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_1024  *data, axi_size_type size)
+{
+   return axi_burst_write_base<axi_1024, 1024>(address, data, size);
+}
+
+axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_u1024 *data, axi_size_type size)
+{
+   return axi_burst_write_base<axi_u1024, 1024>(address, data, size);
+}
+
 axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_float *data, axi_size_type size)
 {
    return axi_burst_write_real_base<axi_float, 32>(address, data, size);
@@ -1101,8 +1228,47 @@ axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_64 
 
 axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_u64 *data, axi_size_type size)
 {
-printf("called axi unsgned 64 burts with address = %d size = %d \n", address, size);
    return axi_burst_read_base<axi_u64, 64>(address, data, size);
+}
+
+axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_128  *data, axi_size_type size)
+{
+   return axi_burst_read_base<axi_128, 128>(address, data, size);
+}
+
+axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_u128 *data, axi_size_type size)
+{
+   return axi_burst_read_base<axi_u128, 128>(address, data, size);
+}
+
+axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_256  *data, axi_size_type size)
+{
+   return axi_burst_read_base<axi_256, 256>(address, data, size);
+}
+
+axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_u256 *data, axi_size_type size)
+{
+   return axi_burst_read_base<axi_u256, 256>(address, data, size);
+}
+
+axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_512  *data, axi_size_type size)
+{
+   return axi_burst_read_base<axi_512, 512>(address, data, size);
+}
+
+axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_u512 *data, axi_size_type size)
+{
+   return axi_burst_read_base<axi_u512, 512>(address, data, size);
+}
+
+axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_1024  *data, axi_size_type size)
+{
+   return axi_burst_read_base<axi_1024, 1024>(address, data, size);
+}
+
+axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_u1024 *data, axi_size_type size)
+{
+   return axi_burst_read_base<axi_u1024, 1024>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_float *data, axi_size_type size)

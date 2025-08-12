@@ -51,8 +51,8 @@ module mac_wrap
   input [12-1 :0] mac_slave_0_AWADDR;
   input  mac_slave_0_AWVALID;
   output  mac_slave_0_AWREADY;
-  input [64-1 :0] mac_slave_0_WDATA;
-  input [8-1 :0] mac_slave_0_WSTRB;
+  input [32-1 :0] mac_slave_0_WDATA;
+  input [4-1 :0] mac_slave_0_WSTRB;
   input  mac_slave_0_WVALID;
   output  mac_slave_0_WREADY;
   output [2-1 :0] mac_slave_0_BRESP;
@@ -61,29 +61,29 @@ module mac_wrap
   input [12-1 :0] mac_slave_0_ARADDR;
   input  mac_slave_0_ARVALID;
   output  mac_slave_0_ARREADY;
-  output [64-1 :0] mac_slave_0_RDATA;
+  output [32-1 :0] mac_slave_0_RDATA;
   output [2-1 :0] mac_slave_0_RRESP;
   output  mac_slave_0_RVALID;
   input  mac_slave_0_RREADY;
 
   // Local signals for interconnect between HLS RTL mac and CSR instance(s)
-  wire  [12-1 : 0] f1_rsc_dat;
-  wire  [12-1 : 0] f2_rsc_dat;
-  wire  [24-1 : 0] a1_rsc_dat;
-  wire  [25-1 : 0] result_rsc_dat;
+  wire  [32-1 : 0] f1_rsc_dat;
+  wire  [32-1 : 0] f2_rsc_dat;
+  wire  [32-1 : 0] a1_rsc_dat;
+  wire  [32-1 : 0] result_rsc_dat;
   // Local signals for interconnect between CSR instance(s) and protocol adaptors
   wire  [12-1 : 0] adc_mac_slave_0_addr;
   wire  adc_mac_slave_0_ren;
   wire  adc_mac_slave_0_wen;
-  wire  [64-1 : 0] adc_mac_slave_0_rdata;
-  wire  [64-1 : 0] adc_mac_slave_0_wdata;
+  wire  [32-1 : 0] adc_mac_slave_0_rdata;
+  wire  [32-1 : 0] adc_mac_slave_0_wdata;
   wire  adc_mac_slave_0_waddr_error;
   wire  adc_mac_slave_0_raddr_error; 
 
 
   ccs_axi4lite2adc #(
     .ADDR_WIDTH(12),
-    .DATA_WIDTH(64)
+    .DATA_WIDTH(32)
   ) adaptor_mac_slave_0
   (
      .ACLK (mac_slave_0_ACLK),
@@ -140,7 +140,7 @@ module mac_wrap
   #
   (
     .address_bits (12),
-    .data_bits (64),
+    .data_bits (32),
     .debug (debug)
   )
   CSR_0_mac_slave_0

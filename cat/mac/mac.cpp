@@ -2,14 +2,15 @@
 #include <ac_channel.h>
 #include <mc_scverify.h>
 
+typedef ac_int<32, true> param_t;
 typedef ac_int<12, true> factor_t;
 typedef ac_int<24, true> product_t;
 typedef ac_int<24, true> addend_t;
 typedef ac_int<25, true> sum_t;
  
-#pragma busifc_cfg slave_0 DataWidth=64 BaseAddress=0 Protocol=axi4lite
+#pragma busifc_cfg slave_0 DataWidth=32 BaseAddress=0 Protocol=axi4lite
 #pragma hls_design top
-void mac(factor_t f1, factor_t f2, addend_t a1, sum_t &result)
+void mac(param_t f1, param_t f2, param_t a1, param_t &result)
 {
 #pragma busifc f1      WordOffset=0 Slave=slave_0
 #pragma busifc f2      WordOffset=1 Slave=slave_0

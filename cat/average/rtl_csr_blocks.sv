@@ -15,6 +15,7 @@ module average_slave_0
   count_rsc_dat, 
   index_hi_rsc_dat, 
   index_lo_rsc_dat, 
+  result_rsc_dat, 
   
   addr, 
   ren, 
@@ -34,6 +35,7 @@ module average_slave_0
   output [32-1 : 0] count_rsc_dat;
   output [32-1 : 0] index_hi_rsc_dat;
   output [32-1 : 0] index_lo_rsc_dat;
+  input [32-1 : 0] result_rsc_dat;
      // External MMR Interface
   input [12-1 : 0] addr;   // Common Read/Write Address
   input  ren;   // Read Enable
@@ -52,7 +54,8 @@ module average_slave_0
   // Configuration Input Registers 
   reg [32-1 : 0] reg_count_rsc_dat;   
   reg [32-1 : 0] reg_index_hi_rsc_dat;   
-  reg [32-1 : 0] reg_index_lo_rsc_dat;  
+  reg [32-1 : 0] reg_index_lo_rsc_dat;   
+  reg [32-1 : 0] reg_result_rsc_dat;  
 
   // ============================================================
   // Host side
@@ -65,26 +68,31 @@ module average_slave_0
       reg_waddr_error <= 1'b0; 
       reg_count_rsc_dat <= 32'd0; // requested reset value 0 
       reg_index_hi_rsc_dat <= 32'd0; // requested reset value 0 
-      reg_index_lo_rsc_dat <= 32'd0; // requested reset value 0
+      reg_index_lo_rsc_dat <= 32'd0; // requested reset value 0 
     end
     else
     begin
       // DEFAULT ASSIGNMENTS (may be overwritten below)
-      reg_waddr_error <= 1'b0;   
+      reg_waddr_error <= 1'b0;    
       if (wen == 1'b1)
       begin
         if (debug > 2'd1)
           $display ("Write event: addr = 0x%h  wdata = 0x%h", addr, wdata);
 
         case(addr)
-          12'd0 : begin    // HADDR: X"0"   
+          12'd16 : begin    // HADDR: X"10"   
               reg_count_rsc_dat[31 : 0] <= wdata[31 : 0]; // Register : count_rsc_dat     
           end  
-          12'd4 : begin    // HADDR: X"4"   
+          12'd20 : begin    // HADDR: X"14"   
               reg_index_hi_rsc_dat[31 : 0] <= wdata[31 : 0]; // Register : index_hi_rsc_dat     
           end  
-          12'd8 : begin    // HADDR: X"8"   
+          12'd24 : begin    // HADDR: X"18"   
               reg_index_lo_rsc_dat[31 : 0] <= wdata[31 : 0]; // Register : index_lo_rsc_dat     
+          end   
+         12'd28 : begin    // HADDR: X"1c"
+            reg_waddr_error <= 1'b1; // write to read-only register, Register : result_rsc_dat
+              if (debug > 2'd0)
+                $display ("Write address addr = 0x%h  to read-only register", addr); 
           end  
           default : begin
             reg_waddr_error <= 1'b1; // write address out of bounds
@@ -103,22 +111,25 @@ module average_slave_0
     begin
       // RESET ACTION
       tmp_rdata <= 0;
-      reg_raddr_error <= 1'b0;      
+      reg_raddr_error <= 1'b0;        
     end
     else
     begin
-      reg_raddr_error <= 1'b0; // default assignment (may be overwritten below)   
+      reg_raddr_error <= 1'b0; // default assignment (may be overwritten below)    
       if (ren == 1'b1)
       begin
         case(addr)  
-          12'd0 : begin     // HADDR: X"0"    
+          12'd16 : begin     // HADDR: X"10"    
             tmp_rdata[31 : 0] <= reg_count_rsc_dat[31 : 0]; // read back register value    
           end // close begin haddr   
-          12'd4 : begin     // HADDR: X"4"    
+          12'd20 : begin     // HADDR: X"14"    
             tmp_rdata[31 : 0] <= reg_index_hi_rsc_dat[31 : 0]; // read back register value    
           end // close begin haddr   
-          12'd8 : begin     // HADDR: X"8"    
+          12'd24 : begin     // HADDR: X"18"    
             tmp_rdata[31 : 0] <= reg_index_lo_rsc_dat[31 : 0]; // read back register value    
+          end // close begin haddr   
+          12'd28 : begin     // HADDR: X"1c"   
+            tmp_rdata[31 : 0] <= result_rsc_dat[31 : 0]; // read output value   
           end // close begin haddr 
           default : begin
             reg_raddr_error <= 1'b1; // read address out of bounds
@@ -140,6 +151,6 @@ module average_slave_0
   // Drive Input Registers to design
   assign count_rsc_dat = reg_count_rsc_dat; 
   assign index_hi_rsc_dat = reg_index_hi_rsc_dat; 
-  assign index_lo_rsc_dat = reg_index_lo_rsc_dat; 
+  assign index_lo_rsc_dat = reg_index_lo_rsc_dat;  
 
 endmodule

@@ -13,12 +13,15 @@ module average_wrap
 (
   clk, 
   arst_n, 
+  start_rsc_dat, 
+  start_rsc_vld, 
+  start_rsc_rdy, 
+  done_rsc_dat, 
+  done_rsc_vld, 
+  done_rsc_rdy, 
   count_triosy_lz, 
   index_hi_triosy_lz, 
   index_lo_triosy_lz, 
-  result_rsc_zout, 
-  result_rsc_lzout, 
-  result_rsc_zin, 
   result_triosy_lz, 
   memory_channels_aw_channel_rsc_dat, 
   memory_channels_aw_channel_rsc_vld, 
@@ -60,12 +63,15 @@ module average_wrap
 
   input  clk;
   input  arst_n;
+  input  start_rsc_dat;
+  input  start_rsc_vld;
+  output  start_rsc_rdy;
+  output  done_rsc_dat;
+  output  done_rsc_vld;
+  input  done_rsc_rdy;
   output  count_triosy_lz;
   output  index_hi_triosy_lz;
   output  index_lo_triosy_lz;
-  output [32-1 :0] result_rsc_zout;
-  output  result_rsc_lzout;
-  input [32-1 :0] result_rsc_zin;
   output  result_triosy_lz;
   output [109-1 :0] memory_channels_aw_channel_rsc_dat;
   output  memory_channels_aw_channel_rsc_vld;
@@ -106,6 +112,7 @@ module average_wrap
   wire  [32-1 : 0] count_rsc_dat;
   wire  [32-1 : 0] index_hi_rsc_dat;
   wire  [32-1 : 0] index_lo_rsc_dat;
+  wire  [32-1 : 0] result_rsc_dat;
   // Local signals for interconnect between CSR instance(s) and protocol adaptors
   wire  [12-1 : 0] adc_average_slave_0_addr;
   wire  adc_average_slave_0_ren;
@@ -157,15 +164,19 @@ module average_wrap
   (
     .clk (clk),
     .arst_n (arst_n),
+    .start_rsc_dat (start_rsc_dat),
+    .start_rsc_vld (start_rsc_vld),
+    .start_rsc_rdy (start_rsc_rdy),
+    .done_rsc_dat (done_rsc_dat),
+    .done_rsc_vld (done_rsc_vld),
+    .done_rsc_rdy (done_rsc_rdy),
     .count_rsc_dat (count_rsc_dat),
     .count_triosy_lz (count_triosy_lz),
     .index_hi_rsc_dat (index_hi_rsc_dat),
     .index_hi_triosy_lz (index_hi_triosy_lz),
     .index_lo_rsc_dat (index_lo_rsc_dat),
     .index_lo_triosy_lz (index_lo_triosy_lz),
-    .result_rsc_zout (result_rsc_zout),
-    .result_rsc_lzout (result_rsc_lzout),
-    .result_rsc_zin (result_rsc_zin),
+    .result_rsc_dat (result_rsc_dat),
     .result_triosy_lz (result_triosy_lz),
     .memory_channels_aw_channel_rsc_dat (memory_channels_aw_channel_rsc_dat),
     .memory_channels_aw_channel_rsc_vld (memory_channels_aw_channel_rsc_vld),
@@ -202,6 +213,7 @@ module average_wrap
     .count_rsc_dat (count_rsc_dat),
     .index_hi_rsc_dat (index_hi_rsc_dat),
     .index_lo_rsc_dat (index_lo_rsc_dat),
+    .result_rsc_dat (result_rsc_dat),
     .addr (adc_average_slave_0_addr),
     .ren (adc_average_slave_0_ren),
     .wen (adc_average_slave_0_wen),

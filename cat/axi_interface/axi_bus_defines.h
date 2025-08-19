@@ -16,8 +16,7 @@
 
 // AXI field size constants
 
-#define M_BITS        16
-#define READ_ID_BITS   4
+#define READ_ID_BITS  16
 #define WRITE_ID_BITS  (READ_ID_BITS)
 #define ADDRESS_BITS  64
 #define LEN_BITS       8

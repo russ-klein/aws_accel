@@ -1,10 +1,12 @@
-solution file add ./average.cpp
+solution file add ./dense.cpp
+solution file add ./testbench.cpp
 solution file add ../axi_interface/axi_master_if.cpp
 
 options set Input/CompilerFlags {-I ../axi_interface}
 
 flow package require /BusSlaveGen
 directive set SCHED_USE_MULTICYCLE true
+
 
 go analyze
 go compile
@@ -19,6 +21,8 @@ solution library add mgc_Xilinx-VIRTEX-uplus-1_beh --          \
 solution library add Xilinx_RAMS
 solution library add Xilinx_ROMS
 solution library add Xilinx_FIFO
+
+directive set /dense/core -DESIGN_GOAL Latency
 
 go libraries
 

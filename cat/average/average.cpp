@@ -26,6 +26,7 @@ void average(ac_channel<bool>     &start,
 
    axi_32 sum;
    axi_32 n;
+   axi_32 i;
    axi_address_type addr;
    axi_address_type base;
    axi_data_type    line;
@@ -34,29 +35,29 @@ void average(ac_channel<bool>     &start,
 
    go = start.read();
 
-   base = index_hi << 32 + index_lo;
+   base = ((axi_address_type) index_hi << 32) + index_lo;
 
-   sum = 0x10000;
+   sum = 0;
 
-   for (int i=0; i<count; i++) {
+  #pragma hls_initiation_interval 1
+   for (i=0; i<count; i+=16) {
+
      addr = base + i * 0x40;
      memory.read(addr, line);
-     n = line.slc<32>(0);
-     sum += n;
-/*
+
+    #pragma hls_unroll
      for (int j=0; j<16; j++) {
        n = line.slc<32>(32*j);
        sum += n;
      }
-*/
    }
 
-   addr = base + count * 4 + 64;
+   addr = base + count * 4 + 0x40;
 
-   // result = sum / count
+   result = sum / count;
 
-   result = sum >> 5;
    line_out = sum;
+
    memory.write(0x800, (axi_data_type) 0x12345678);
    memory.write(0x840, (axi_data_type) 0x11112222);
    memory.write(0x880, (axi_data_type) 0x33334444);

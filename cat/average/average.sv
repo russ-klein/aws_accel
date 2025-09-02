@@ -440,8 +440,178 @@ endmodule
 
 
 
-//------> /wv/hlsb/CATAPULT/2025.2/2025-05-14/aol/Mgc_home/pkgs/siflibs/mgc_shift_bl_beh_v5.v 
-module mgc_shift_bl_v5(a,s,z);
+//------> /wv/hlsb/CATAPULT/2025.2/2025-05-14/aol/Mgc_home/pkgs/hls_pkgs/mgc_comps_src/mgc_div_beh.v 
+module mgc_div(a,b,z);
+   parameter width_a = 8;
+   parameter width_b = 8;
+   parameter signd = 1;
+   input [width_a-1:0] a;
+   input [width_b-1:0] b; 
+   output [width_a-1:0] z;  
+   reg  [width_a-1:0] z;
+
+   always@(a or b)
+     begin
+	if(signd)
+	  div_s(a,b,z);
+	else
+          div_u(a,b,z);
+     end
+
+
+//-----------------------------------------------------------------
+//     -- Vectorized Overloaded Arithmetic Operators
+//-----------------------------------------------------------------
+   
+   function [width_a-1:0] fabs_l; 
+      input [width_a-1:0] arg1;
+      begin
+         case(arg1[width_a-1])
+            1'b1:
+               fabs_l = {(width_a){1'b0}} - arg1;
+            default: // was: 1'b0:
+               fabs_l = arg1;
+         endcase
+      end
+   endfunction
+   
+   function [width_b-1:0] fabs_r; 
+      input [width_b-1:0] arg1;
+      begin
+         case (arg1[width_b-1])
+            1'b1:
+               fabs_r =  {(width_b){1'b0}} - arg1;
+            default: // was: 1'b0:
+               fabs_r = arg1;
+         endcase
+      end
+   endfunction
+
+   function [width_b:0] minus;
+     input [width_b:0] in1;
+     input [width_b:0] in2;
+     reg [width_b+1:0] tmp;
+     begin
+       tmp = in1 - in2;
+       minus = tmp[width_b:0];
+     end
+   endfunction
+
+   
+   task divmod;
+      input [width_a-1:0] l;
+      input [width_b-1:0] r;
+      output [width_a-1:0] rdiv;
+      output [width_b-1:0] rmod;
+      
+      parameter llen = width_a;
+      parameter rlen = width_b;
+      reg [(llen+rlen)-1:0] lbuf;
+      reg [rlen:0] diff;
+	  integer i;
+      begin
+	 lbuf = {(llen+rlen){1'b0}};
+//64'b0;
+	 lbuf[llen-1:0] = l;
+	 for(i=width_a-1;i>=0;i=i-1)
+	   begin
+              diff = minus(lbuf[(llen+rlen)-1:llen-1], {1'b0,r});
+	      rdiv[i] = ~diff[rlen];
+	      if(diff[rlen] == 0)
+		lbuf[(llen+rlen)-1:llen-1] = diff;
+	      lbuf[(llen+rlen)-1:1] = lbuf[(llen+rlen)-2:0];
+	   end
+	 rmod = lbuf[(llen+rlen)-1:llen];
+      end
+   endtask
+      
+
+   task div_u;
+      input [width_a-1:0] l;
+      input [width_b-1:0] r;
+      output [width_a-1:0] rdiv;
+      
+      reg [width_a-01:0] rdiv;
+      reg [width_b-1:0] rmod;
+      begin
+	 divmod(l, r, rdiv, rmod);
+      end
+   endtask
+   
+   task mod_u;
+      input [width_a-1:0] l;
+      input [width_b-1:0] r;
+      output [width_b-1:0] rmod;
+      
+      reg [width_a-01:0] rdiv;
+      reg [width_b-1:0] rmod;
+      begin
+	 divmod(l, r, rdiv, rmod);
+      end
+   endtask
+
+   task rem_u; 
+      input [width_a-1:0] l;
+      input [width_b-1:0] r;    
+      output [width_b-1:0] rmod;
+      begin
+	 mod_u(l,r,rmod);
+      end
+   endtask // rem_u
+
+   task div_s;
+      input [width_a-1:0] l;
+      input [width_b-1:0] r;
+      output [width_a-1:0] rdiv;
+      
+      reg [width_a-01:0] rdiv;
+      reg [width_b-1:0] rmod;
+      begin
+	 divmod(fabs_l(l), fabs_r(r),rdiv,rmod);
+	 if(l[width_a-1] != r[width_b-1])
+	   rdiv = {(width_a){1'b0}} - rdiv;
+      end
+   endtask
+
+   task mod_s;
+      input [width_a-1:0] l;
+      input [width_b-1:0] r;
+      output [width_b-1:0] rmod;
+      
+      reg [width_a-01:0] rdiv;
+      reg [width_b-1:0] rmod;
+      reg [width_b-1:0] rnul;
+      reg [width_b:0] rmod_t;
+      begin
+         rnul = {width_b{1'b0}};
+	 divmod(fabs_l(l), fabs_r(r), rdiv, rmod);
+         if (l[width_a-1])
+	   rmod = {(width_b){1'b0}} - rmod;
+	 if((rmod != rnul) && (l[width_a-1] != r[width_b-1]))
+            begin
+               rmod_t = r + rmod;
+               rmod = rmod_t[width_b-1:0];
+            end
+      end
+   endtask // mod_s
+   
+   task rem_s; 
+      input [width_a-1:0] l;
+      input [width_b-1:0] r;    
+      output [width_b-1:0] rmod;   
+      reg [width_a-01:0] rdiv;
+      reg [width_b-1:0] rmod;
+      begin
+	 divmod(fabs_l(l),fabs_r(r),rdiv,rmod);
+	 if(l[width_a-1])
+	   rmod = {(width_b){1'b0}} - rmod;
+      end
+   endtask
+
+  endmodule
+
+//------> /wv/hlsb/CATAPULT/2025.2/2025-05-14/aol/Mgc_home/pkgs/siflibs/mgc_shift_br_beh_v5.v 
+module mgc_shift_br_v5(a,s,z);
    parameter    width_a = 4;
    parameter    signd_a = 1;
    parameter    width_s = 2;
@@ -451,14 +621,15 @@ module mgc_shift_bl_v5(a,s,z);
    input [width_s-1:0] s;
    output [width_z -1:0] z;
 
-   generate if ( signd_a )
-   begin: SGNED
-     assign z = fshl_s(a,s,a[width_a-1]);
-   end
-   else
-   begin: UNSGNED
-     assign z = fshl_s(a,s,1'b0);
-   end
+   generate
+     if (signd_a)
+     begin: SGNED
+       assign z = fshr_s(a,s,a[width_a-1]);
+     end
+     else
+     begin: UNSGNED
+       assign z = fshr_s(a,s,1'b0);
+     end
    endgenerate
 
    //Shift-left - unsigned shift argument one bit more
@@ -479,14 +650,6 @@ module mgc_shift_bl_v5(a,s,z);
       end
    endfunction // fshl_u
 
-   //Shift-left - unsigned shift argument
-   function [width_z-1:0] fshl_u;
-      input [width_a-1:0] arg1;
-      input [width_s-1:0] arg2;
-      input sbit;
-      fshl_u = fshl_u_1({sbit,arg1} ,arg2, sbit);
-   endfunction // fshl_u
-
    //Shift right - unsigned shift argument
    function [width_z-1:0] fshr_u;
       input [width_a-1:0] arg1;
@@ -503,72 +666,24 @@ module mgc_shift_bl_v5(a,s,z);
         result = result_t >>> arg2;
         fshr_u =  result[olen-1:0];
       end
-   endfunction // fshl_u
+   endfunction // fshr_u
 
-   //Shift left - signed shift argument
-   function [width_z-1:0] fshl_s;
-      input [width_a-1:0] arg1;
-      input [width_s-1:0] arg2;
-      input sbit;
-      reg [width_a:0] sbit_arg1;
-      begin
-        // Ignoring the possibility that arg2[width_s-1] could be X
-        // because of customer complaints regarding X'es in simulation results
-        if ( arg2[width_s-1] == 1'b0 )
-        begin
-          sbit_arg1[width_a:0] = {(width_a+1){1'b0}};
-          fshl_s = fshl_u(arg1, arg2, sbit);
-        end
-        else
-        begin
-          sbit_arg1[width_a] = sbit;
-          sbit_arg1[width_a-1:0] = arg1;
-          fshl_s = fshr_u(sbit_arg1[width_a:1], ~arg2, sbit);
-        end
-      end
-   endfunction
-
-endmodule
-
-//------> /wv/hlsb/CATAPULT/2025.2/2025-05-14/aol/Mgc_home/pkgs/siflibs/mgc_shift_r_beh_v5.v 
-module mgc_shift_r_v5(a,s,z);
-   parameter    width_a = 4;
-   parameter    signd_a = 1;
-   parameter    width_s = 2;
-   parameter    width_z = 8;
-
-   input [width_a-1:0] a;
-   input [width_s-1:0] s;
-   output [width_z -1:0] z;
-
-   generate
-     if (signd_a)
-     begin: SGNED
-       assign z = fshr_u(a,s,a[width_a-1]);
+   //Shift right - signed shift argument
+   function [width_z-1:0] fshr_s;
+     input [width_a-1:0] arg1;
+     input [width_s-1:0] arg2;
+     input sbit;
+     begin
+       if ( arg2[width_s-1] == 1'b0 )
+       begin
+         fshr_s = fshr_u(arg1, arg2, sbit);
+       end
+       else
+       begin
+         fshr_s = fshl_u_1({arg1, 1'b0},~arg2, sbit);
+       end
      end
-     else
-     begin: UNSGNED
-       assign z = fshr_u(a,s,1'b0);
-     end
-   endgenerate
-
-   //Shift right - unsigned shift argument
-   function [width_z-1:0] fshr_u;
-      input [width_a-1:0] arg1;
-      input [width_s-1:0] arg2;
-      input sbit;
-      parameter olen = width_z;
-      parameter ilen = signd_a ? width_a : width_a+1;
-      parameter len = (ilen >= olen) ? ilen : olen;
-      reg signed [len-1:0] result;
-      reg signed [len-1:0] result_t;
-      begin
-        result_t = $signed( {(len){sbit}} );
-        result_t[width_a-1:0] = arg1;
-        result = result_t >>> arg2;
-        fshr_u =  result[olen-1:0];
-      end
-   endfunction // fshl_u
+   endfunction 
 
 endmodule
 
@@ -579,7 +694,7 @@ endmodule
 //  HLS Date:       Wed May 14 16:03:56 PDT 2025
 // 
 //  Generated by:   russk@orw-vistapult
-//  Generated date: Mon Aug 18 18:16:58 2025
+//  Generated date: Thu Aug 28 11:13:50 2025
 // ----------------------------------------------------------------------
 
 // 
@@ -590,32 +705,48 @@ endmodule
 
 
 module average_core_core_fsm (
-  clk, arst_n, core_wen, fsm_output, main_C_0_tr0, for_C_2_tr0
+  clk, arst_n, core_wen, fsm_output, main_C_0_tr0, for_C_3_tr0
 );
   input clk;
   input arst_n;
   input core_wen;
-  output [9:0] fsm_output;
-  reg [9:0] fsm_output;
+  output [25:0] fsm_output;
+  reg [25:0] fsm_output;
   input main_C_0_tr0;
-  input for_C_2_tr0;
+  input for_C_3_tr0;
 
 
   // FSM State Type Declaration for average_core_core_fsm_1
   parameter
-    core_rlp_C_0 = 4'd0,
-    main_C_0 = 4'd1,
-    for_C_0 = 4'd2,
-    for_C_1 = 4'd3,
-    for_C_2 = 4'd4,
-    main_C_1 = 4'd5,
-    main_C_2 = 4'd6,
-    main_C_3 = 4'd7,
-    main_C_4 = 4'd8,
-    main_C_5 = 4'd9;
+    core_rlp_C_0 = 5'd0,
+    main_C_0 = 5'd1,
+    for_C_0 = 5'd2,
+    for_C_1 = 5'd3,
+    for_C_2 = 5'd4,
+    for_C_3 = 5'd5,
+    main_C_1 = 5'd6,
+    main_C_2 = 5'd7,
+    main_C_3 = 5'd8,
+    main_C_4 = 5'd9,
+    main_C_5 = 5'd10,
+    main_C_6 = 5'd11,
+    main_C_7 = 5'd12,
+    main_C_8 = 5'd13,
+    main_C_9 = 5'd14,
+    main_C_10 = 5'd15,
+    main_C_11 = 5'd16,
+    main_C_12 = 5'd17,
+    main_C_13 = 5'd18,
+    main_C_14 = 5'd19,
+    main_C_15 = 5'd20,
+    main_C_16 = 5'd21,
+    main_C_17 = 5'd22,
+    main_C_18 = 5'd23,
+    main_C_19 = 5'd24,
+    main_C_20 = 5'd25;
 
-  reg [3:0] state_var;
-  reg [3:0] state_var_NS;
+  reg [4:0] state_var;
+  reg [4:0] state_var_NS;
 
 
   // Interconnect Declarations for Component Instantiations 
@@ -623,7 +754,7 @@ module average_core_core_fsm (
   begin : average_core_core_fsm_1
     case (state_var)
       main_C_0 : begin
-        fsm_output = 10'b0000000010;
+        fsm_output = 26'b00000000000000000000000010;
         if ( main_C_0_tr0 ) begin
           state_var_NS = main_C_1;
         end
@@ -632,16 +763,20 @@ module average_core_core_fsm (
         end
       end
       for_C_0 : begin
-        fsm_output = 10'b0000000100;
+        fsm_output = 26'b00000000000000000000000100;
         state_var_NS = for_C_1;
       end
       for_C_1 : begin
-        fsm_output = 10'b0000001000;
+        fsm_output = 26'b00000000000000000000001000;
         state_var_NS = for_C_2;
       end
       for_C_2 : begin
-        fsm_output = 10'b0000010000;
-        if ( for_C_2_tr0 ) begin
+        fsm_output = 26'b00000000000000000000010000;
+        state_var_NS = for_C_3;
+      end
+      for_C_3 : begin
+        fsm_output = 26'b00000000000000000000100000;
+        if ( for_C_3_tr0 ) begin
           state_var_NS = main_C_1;
         end
         else begin
@@ -649,28 +784,88 @@ module average_core_core_fsm (
         end
       end
       main_C_1 : begin
-        fsm_output = 10'b0000100000;
+        fsm_output = 26'b00000000000000000001000000;
         state_var_NS = main_C_2;
       end
       main_C_2 : begin
-        fsm_output = 10'b0001000000;
+        fsm_output = 26'b00000000000000000010000000;
         state_var_NS = main_C_3;
       end
       main_C_3 : begin
-        fsm_output = 10'b0010000000;
+        fsm_output = 26'b00000000000000000100000000;
         state_var_NS = main_C_4;
       end
       main_C_4 : begin
-        fsm_output = 10'b0100000000;
+        fsm_output = 26'b00000000000000001000000000;
         state_var_NS = main_C_5;
       end
       main_C_5 : begin
-        fsm_output = 10'b1000000000;
+        fsm_output = 26'b00000000000000010000000000;
+        state_var_NS = main_C_6;
+      end
+      main_C_6 : begin
+        fsm_output = 26'b00000000000000100000000000;
+        state_var_NS = main_C_7;
+      end
+      main_C_7 : begin
+        fsm_output = 26'b00000000000001000000000000;
+        state_var_NS = main_C_8;
+      end
+      main_C_8 : begin
+        fsm_output = 26'b00000000000010000000000000;
+        state_var_NS = main_C_9;
+      end
+      main_C_9 : begin
+        fsm_output = 26'b00000000000100000000000000;
+        state_var_NS = main_C_10;
+      end
+      main_C_10 : begin
+        fsm_output = 26'b00000000001000000000000000;
+        state_var_NS = main_C_11;
+      end
+      main_C_11 : begin
+        fsm_output = 26'b00000000010000000000000000;
+        state_var_NS = main_C_12;
+      end
+      main_C_12 : begin
+        fsm_output = 26'b00000000100000000000000000;
+        state_var_NS = main_C_13;
+      end
+      main_C_13 : begin
+        fsm_output = 26'b00000001000000000000000000;
+        state_var_NS = main_C_14;
+      end
+      main_C_14 : begin
+        fsm_output = 26'b00000010000000000000000000;
+        state_var_NS = main_C_15;
+      end
+      main_C_15 : begin
+        fsm_output = 26'b00000100000000000000000000;
+        state_var_NS = main_C_16;
+      end
+      main_C_16 : begin
+        fsm_output = 26'b00001000000000000000000000;
+        state_var_NS = main_C_17;
+      end
+      main_C_17 : begin
+        fsm_output = 26'b00010000000000000000000000;
+        state_var_NS = main_C_18;
+      end
+      main_C_18 : begin
+        fsm_output = 26'b00100000000000000000000000;
+        state_var_NS = main_C_19;
+      end
+      main_C_19 : begin
+        fsm_output = 26'b01000000000000000000000000;
+        state_var_NS = main_C_20;
+      end
+      main_C_20 : begin
+        fsm_output = 26'b10000000000000000000000000;
         state_var_NS = main_C_0;
       end
       // core_rlp_C_0
       default : begin
-        fsm_output = 10'b0000000001;
+        fsm_output = 26'b00000000000000000000000001;
         state_var_NS = main_C_0;
       end
     endcase
@@ -2071,6 +2266,7 @@ module average_core (
   wire [31:0] count_rsci_idat;
   wire [31:0] index_hi_rsci_idat;
   wire [31:0] index_lo_rsci_idat;
+  reg [31:0] result_rsci_idat;
   wire memory_channels_aw_channel_rsci_wen_comp;
   wire memory_channels_aw_channel_rsci_irdy;
   wire memory_channels_aw_channel_rsci_irdy_oreg;
@@ -2087,24 +2283,28 @@ module average_core (
   wire memory_channels_r_channel_rsci_ivld;
   wire memory_channels_r_channel_rsci_ivld_oreg;
   wire [511:0] memory_channels_r_channel_rsci_idat_mxwt;
+  reg result_triosy_obj_iswt0;
+  reg [31:0] div_cmp_a;
+  reg [31:0] div_cmp_b;
+  wire [31:0] div_cmp_z;
   reg [15:0] memory_channels_ar_channel_rsci_idat_108_93;
-  reg [5:0] memory_channels_ar_channel_rsci_idat_34_29;
-  reg [26:0] result_rsci_idat_26_0;
+  reg [53:0] memory_channels_ar_channel_rsci_idat_92_39;
+  wire [54:0] nl_memory_channels_ar_channel_rsci_idat_92_39;
+  reg [9:0] memory_channels_ar_channel_rsci_idat_38_29;
   reg [31:0] memory_channels_w_channel_rsci_idat_96_65;
-  reg [26:0] memory_channels_ar_channel_rsci_idat_61_35;
-  wire [27:0] nl_memory_channels_ar_channel_rsci_idat_61_35;
   reg [1:0] memory_channels_aw_channel_rsci_idat_36_35;
-  wire [9:0] fsm_output;
-  wire or_dcpl_2;
-  wire or_tmp_7;
-  wire and_12_cse;
-  wire and_13_cse;
+  wire [25:0] fsm_output;
+  wire and_dcpl_15;
+  wire and_dcpl_21;
+  wire or_tmp_8;
+  wire and_43_cse;
   reg exit_for_sva;
   wire xor_cse;
   reg reg_count_triosy_obj_iswt0_cse;
   wire memory_send_ar_and_cse;
   wire memory_send_aw_and_cse;
-  wire and_80_cse;
+  wire count_and_cse;
+  wire and_15_cse;
   wire core_wen_rtff;
   reg reg_start_rsci_oswt_tmp;
   reg reg_done_rsci_oswt_tmp;
@@ -2113,9 +2313,9 @@ module average_core (
   reg reg_memory_channels_ar_channel_rsci_oswt_tmp;
   reg reg_memory_channels_r_channel_rsci_oswt_tmp;
   wire start_rsci_wen_comp_iff;
-  wire mux_9_rmff;
+  wire mux_12_rmff;
   wire done_rsci_wen_comp_iff;
-  wire mux_10_rmff;
+  wire mux_13_rmff;
   wire memory_channels_aw_channel_rsci_wen_comp_iff;
   wire memory_send_aw_mux_1_rmff;
   wire memory_channels_w_channel_rsci_wen_comp_iff;
@@ -2125,36 +2325,50 @@ module average_core (
   wire memory_send_ar_mux_rmff;
   wire memory_channels_r_channel_rsci_wen_comp_iff;
   wire memory_get_r_mux_rmff;
-  wire [31:0] lshift_itm;
-  wire [31:0] memory_axi_read_base_axi_u512_512_rshift_itm;
   reg [15:0] memory_axi_read_base_axi_u512_512_id_lpi_2;
   wire [16:0] nl_memory_axi_read_base_axi_u512_512_id_lpi_2;
   reg [31:0] count_sva;
-  reg [31:0] lshift_psp_sva;
-  reg [31:0] sum_sva;
-  reg [31:0] for_i_sva;
-  wire [31:0] sum_sva_mx0w1;
-  wire [32:0] nl_sum_sva_mx0w1;
-  wire [31:0] for_i_sva_2;
-  wire [32:0] nl_for_i_sva_2;
+  reg [31:0] io_read_index_lo_rsc_cse_sva;
+  reg [31:0] acc_psp_sva;
+  wire [32:0] nl_acc_psp_sva;
+  reg [31:0] sum_1_sva;
+  reg [27:0] i_31_4_sva;
+  reg [31:0] for_for_acc_4_itm;
+  wire [33:0] nl_for_for_acc_4_itm;
+  reg [31:0] for_for_acc_5_itm;
+  wire [33:0] nl_for_for_acc_5_itm;
+  reg [31:0] for_for_acc_6_itm;
+  wire [33:0] nl_for_for_acc_6_itm;
+  reg [31:0] for_for_acc_8_itm;
+  wire [33:0] nl_for_for_acc_8_itm;
+  reg [31:0] for_for_acc_9_itm;
+  wire [33:0] nl_for_for_acc_9_itm;
+  reg [31:0] for_for_acc_10_itm;
+  wire [32:0] nl_for_for_acc_10_itm;
+  wire [31:0] sum_1_sva_1;
+  wire [32:0] nl_sum_1_sva_1;
+  wire [27:0] i_31_4_sva_3;
+  wire [28:0] nl_i_31_4_sva_3;
+  wire [511:0] line_sva_1;
 
   wire or_nl;
-  wire or_13_nl;
-  wire or_14_nl;
+  wire or_11_nl;
+  wire or_12_nl;
+  wire[31:0] mux_nl;
+  wire and_60_nl;
+  wire not_nl;
+  wire and_62_nl;
   wire[1:0] memory_send_aw_memory_send_aw_nor_nl;
   wire[1:0] memory_send_aw_mux_nl;
+  wire sum_not_1_nl;
+  wire[31:0] for_for_acc_3_nl;
+  wire[33:0] nl_for_for_acc_3_nl;
+  wire[31:0] for_for_acc_7_nl;
+  wire[33:0] nl_for_for_acc_7_nl;
 
   // Interconnect Declarations for Component Instantiations 
-  wire [31:0] nl_result_rsci_idat;
-  assign nl_result_rsci_idat = {{5{result_rsci_idat_26_0[26]}}, result_rsci_idat_26_0};
-  wire[26:0] operator_32_true_acc_nl;
-  wire[27:0] nl_operator_32_true_acc_nl;
-  wire [31:0] nl_lshift_rg_s;
-  assign nl_operator_32_true_acc_nl = (index_lo_rsci_idat[31:5]) + 27'b000000000000000000000000001;
-  assign operator_32_true_acc_nl = nl_operator_32_true_acc_nl[26:0];
-  assign nl_lshift_rg_s = {operator_32_true_acc_nl , (index_lo_rsci_idat[4:0])};
-  wire [8:0] nl_memory_axi_read_base_axi_u512_512_rshift_rg_s;
-  assign nl_memory_axi_read_base_axi_u512_512_rshift_rg_s = {(lshift_psp_sva[5:0])
+  wire [9:0] nl_memory_axi_read_base_axi_u512_512_rshift_rg_s;
+  assign nl_memory_axi_read_base_axi_u512_512_rshift_rg_s = {1'b0 , (io_read_index_lo_rsc_cse_sva[5:0])
       , 3'b000};
   wire [108:0] nl_average_core_memory_channels_aw_channel_rsci_inst_memory_channels_aw_channel_rsci_idat;
   assign nl_average_core_memory_channels_aw_channel_rsci_inst_memory_channels_aw_channel_rsci_idat
@@ -2165,9 +2379,8 @@ module average_core (
       = signext_577_97({memory_channels_w_channel_rsci_idat_96_65 , 65'b11111111111111111111111111111111111111111111111111111111111111111});
   wire [108:0] nl_average_core_memory_channels_ar_channel_rsci_inst_memory_channels_ar_channel_rsci_idat;
   assign nl_average_core_memory_channels_ar_channel_rsci_inst_memory_channels_ar_channel_rsci_idat
-      = {memory_channels_ar_channel_rsci_idat_108_93 , ({{31{memory_channels_ar_channel_rsci_idat_61_35[26]}},
-      memory_channels_ar_channel_rsci_idat_61_35}) , memory_channels_ar_channel_rsci_idat_34_29
-      , 29'b00000000110010000000000000000};
+      = {memory_channels_ar_channel_rsci_idat_108_93 , memory_channels_ar_channel_rsci_idat_92_39
+      , memory_channels_ar_channel_rsci_idat_38_29 , 29'b00000000110010000000000000000};
   wire  nl_average_core_core_fsm_inst_main_C_0_tr0;
   assign nl_average_core_core_fsm_inst_main_C_0_tr0 = ~ xor_cse;
   ccs_in_v1 #(.rscid(32'sd9),
@@ -2187,24 +2400,23 @@ module average_core (
     );
   ccs_out_v1 #(.rscid(32'sd12),
   .width(32'sd32)) result_rsci (
-      .idat(nl_result_rsci_idat[31:0]),
+      .idat(result_rsci_idat),
       .dat(result_rsc_dat)
     );
-  mgc_shift_bl_v5 #(.width_a(32'sd32),
-  .signd_a(32'sd1),
-  .width_s(32'sd32),
-  .width_z(32'sd32)) lshift_rg (
-      .a(index_hi_rsci_idat),
-      .s(nl_lshift_rg_s[31:0]),
-      .z(lshift_itm)
+  mgc_div #(.width_a(32'sd32),
+  .width_b(32'sd32),
+  .signd(32'sd1)) div_cmp (
+      .a(div_cmp_a),
+      .b(div_cmp_b),
+      .z(div_cmp_z)
     );
-  mgc_shift_r_v5 #(.width_a(32'sd512),
+  mgc_shift_br_v5 #(.width_a(32'sd512),
   .signd_a(32'sd0),
-  .width_s(32'sd9),
-  .width_z(32'sd32)) memory_axi_read_base_axi_u512_512_rshift_rg (
+  .width_s(32'sd10),
+  .width_z(32'sd512)) memory_axi_read_base_axi_u512_512_rshift_rg (
       .a(memory_channels_r_channel_rsci_idat_mxwt),
-      .s(nl_memory_axi_read_base_axi_u512_512_rshift_rg_s[8:0]),
-      .z(memory_axi_read_base_axi_u512_512_rshift_itm)
+      .s(nl_memory_axi_read_base_axi_u512_512_rshift_rg_s[9:0]),
+      .z(line_sva_1)
     );
   average_core_start_rsci average_core_start_rsci_inst (
       .clk(clk),
@@ -2217,7 +2429,7 @@ module average_core (
       .start_rsci_ivld(start_rsci_ivld),
       .start_rsci_ivld_oreg(start_rsci_ivld_oreg),
       .start_rsci_wen_comp_pff(start_rsci_wen_comp_iff),
-      .start_rsci_oswt_pff(mux_9_rmff),
+      .start_rsci_oswt_pff(mux_12_rmff),
       .start_rsci_ivld_oreg_pff(start_rsci_ivld)
     );
   average_core_wait_dp average_core_wait_dp_inst (
@@ -2250,7 +2462,7 @@ module average_core (
       .done_rsci_irdy(done_rsci_irdy),
       .done_rsci_irdy_oreg(done_rsci_irdy_oreg),
       .done_rsci_wen_comp_pff(done_rsci_wen_comp_iff),
-      .done_rsci_oswt_pff(mux_10_rmff),
+      .done_rsci_oswt_pff(mux_13_rmff),
       .done_rsci_irdy_oreg_pff(done_rsci_irdy)
     );
   average_core_memory_channels_aw_channel_rsci average_core_memory_channels_aw_channel_rsci_inst
@@ -2353,7 +2565,7 @@ module average_core (
   average_core_result_triosy_obj average_core_result_triosy_obj_inst (
       .result_triosy_lz(result_triosy_lz),
       .core_wten(core_wten),
-      .result_triosy_obj_iswt0(reg_count_triosy_obj_iswt0_cse)
+      .result_triosy_obj_iswt0(result_triosy_obj_iswt0)
     );
   average_core_staller average_core_staller_inst (
       .clk(clk),
@@ -2381,32 +2593,38 @@ module average_core (
       .core_wen(core_wen),
       .fsm_output(fsm_output),
       .main_C_0_tr0(nl_average_core_core_fsm_inst_main_C_0_tr0),
-      .for_C_2_tr0(exit_for_sva)
+      .for_C_3_tr0(exit_for_sva)
     );
-  assign or_nl = (fsm_output[9]) | (fsm_output[0]);
-  assign mux_9_rmff = MUX_s_1_2_2(reg_start_rsci_oswt_tmp, or_nl, core_wen);
-  assign mux_10_rmff = MUX_s_1_2_2(reg_done_rsci_oswt_tmp, (fsm_output[8]), core_wen);
-  assign or_13_nl = or_dcpl_2 | (fsm_output[7]) | and_12_cse | and_13_cse;
+  assign or_nl = (fsm_output[25]) | (fsm_output[0]);
+  assign mux_12_rmff = MUX_s_1_2_2(reg_start_rsci_oswt_tmp, or_nl, core_wen);
+  assign mux_13_rmff = MUX_s_1_2_2(reg_done_rsci_oswt_tmp, (fsm_output[24]), core_wen);
+  assign or_11_nl = (fsm_output[23:21]!=3'b000) | and_15_cse | and_43_cse;
   assign memory_send_aw_mux_1_rmff = MUX_s_1_2_2(reg_memory_channels_aw_channel_rsci_oswt_tmp,
-      or_13_nl, core_wen);
-  assign or_14_nl = or_dcpl_2 | (fsm_output[8:7]!=2'b00);
+      or_11_nl, core_wen);
+  assign or_12_nl = (fsm_output[24:21]!=4'b0000);
   assign memory_get_b_mux_rmff = MUX_s_1_2_2(reg_memory_channels_b_channel_rsci_oswt_tmp,
-      or_14_nl, core_wen);
+      or_12_nl, core_wen);
   assign memory_send_ar_mux_rmff = MUX_s_1_2_2(reg_memory_channels_ar_channel_rsci_oswt_tmp,
       (fsm_output[2]), core_wen);
   assign memory_get_r_mux_rmff = MUX_s_1_2_2(reg_memory_channels_r_channel_rsci_oswt_tmp,
       (fsm_output[3]), core_wen);
+  assign and_15_cse = exit_for_sva & (fsm_output[5]);
   assign memory_send_ar_and_cse = core_wen & (fsm_output[2]);
-  assign memory_send_aw_and_cse = core_wen & (or_tmp_7 | (fsm_output[7:5]!=3'b000));
-  assign and_80_cse = core_wen & (fsm_output[1]);
-  assign nl_sum_sva_mx0w1 = memory_axi_read_base_axi_u512_512_rshift_itm + sum_sva;
-  assign sum_sva_mx0w1 = nl_sum_sva_mx0w1[31:0];
-  assign nl_for_i_sva_2 = for_i_sva + 32'b00000000000000000000000000000001;
-  assign for_i_sva_2 = nl_for_i_sva_2[31:0];
-  assign or_dcpl_2 = (fsm_output[6:5]!=2'b00);
-  assign and_12_cse = (~ xor_cse) & (fsm_output[1]);
-  assign and_13_cse = exit_for_sva & (fsm_output[4]);
-  assign or_tmp_7 = and_12_cse | and_13_cse;
+  assign memory_send_aw_and_cse = core_wen & (or_tmp_8 | (fsm_output[23:21]!=3'b000));
+  assign count_and_cse = core_wen & (fsm_output[1]);
+  assign nl_for_for_acc_3_nl = for_for_acc_4_itm + for_for_acc_5_itm + for_for_acc_6_itm;
+  assign for_for_acc_3_nl = nl_for_for_acc_3_nl[31:0];
+  assign nl_for_for_acc_7_nl = for_for_acc_8_itm + for_for_acc_9_itm + for_for_acc_10_itm;
+  assign for_for_acc_7_nl = nl_for_for_acc_7_nl[31:0];
+  assign nl_sum_1_sva_1 = for_for_acc_3_nl + for_for_acc_7_nl;
+  assign sum_1_sva_1 = nl_sum_1_sva_1[31:0];
+  assign nl_i_31_4_sva_3 = i_31_4_sva + 28'b0000000000000000000000000001;
+  assign i_31_4_sva_3 = nl_i_31_4_sva_3[27:0];
+  assign and_dcpl_15 = ~((fsm_output[21]) | (fsm_output[20]) | (fsm_output[1]));
+  assign and_dcpl_21 = (~((fsm_output[4]) | (fsm_output[25]) | (fsm_output[3])))
+      & (~((fsm_output[24:22]!=3'b000)));
+  assign and_43_cse = (~ xor_cse) & (fsm_output[1]);
+  assign or_tmp_8 = and_15_cse | and_43_cse;
   assign xor_cse = $signed(32'b00000000000000000000000000000000) < $signed((count_rsci_idat));
   always @(posedge clk or negedge arst_n) begin
     if ( ~ arst_n ) begin
@@ -2419,8 +2637,8 @@ module average_core (
       core_wen <= 1'b1;
     end
     else begin
-      reg_start_rsci_oswt_tmp <= mux_9_rmff;
-      reg_done_rsci_oswt_tmp <= mux_10_rmff;
+      reg_start_rsci_oswt_tmp <= mux_12_rmff;
+      reg_done_rsci_oswt_tmp <= mux_13_rmff;
       reg_memory_channels_aw_channel_rsci_oswt_tmp <= memory_send_aw_mux_1_rmff;
       reg_memory_channels_b_channel_rsci_oswt_tmp <= memory_get_b_mux_rmff;
       reg_memory_channels_ar_channel_rsci_oswt_tmp <= memory_send_ar_mux_rmff;
@@ -2431,32 +2649,44 @@ module average_core (
   always @(posedge clk or negedge arst_n) begin
     if ( ~ arst_n ) begin
       reg_count_triosy_obj_iswt0_cse <= 1'b0;
+      result_triosy_obj_iswt0 <= 1'b0;
     end
     else if ( core_wen ) begin
-      reg_count_triosy_obj_iswt0_cse <= or_tmp_7;
+      reg_count_triosy_obj_iswt0_cse <= or_tmp_8;
+      result_triosy_obj_iswt0 <= fsm_output[20];
+    end
+  end
+  always @(posedge clk) begin
+    if ( core_wen ) begin
+      div_cmp_a <= MUX_v_32_2_2(32'b00000000000000000000000000000000, mux_nl, not_nl);
+      div_cmp_b <= MUX_v_32_2_2(count_rsci_idat, count_sva, and_62_nl);
+      for_for_acc_4_itm <= nl_for_for_acc_4_itm[31:0];
+      for_for_acc_5_itm <= nl_for_for_acc_5_itm[31:0];
+      for_for_acc_6_itm <= nl_for_for_acc_6_itm[31:0];
+      for_for_acc_8_itm <= nl_for_for_acc_8_itm[31:0];
+      for_for_acc_9_itm <= nl_for_for_acc_9_itm[31:0];
+      for_for_acc_10_itm <= nl_for_for_acc_10_itm[31:0];
     end
   end
   always @(posedge clk) begin
     if ( memory_send_ar_and_cse ) begin
-      memory_channels_ar_channel_rsci_idat_34_29 <= lshift_psp_sva[5:0];
-      memory_channels_ar_channel_rsci_idat_61_35 <= nl_memory_channels_ar_channel_rsci_idat_61_35[26:0];
+      memory_channels_ar_channel_rsci_idat_38_29 <= io_read_index_lo_rsc_cse_sva[9:0];
+      memory_channels_ar_channel_rsci_idat_92_39 <= nl_memory_channels_ar_channel_rsci_idat_92_39[53:0];
       memory_channels_ar_channel_rsci_idat_108_93 <= memory_axi_read_base_axi_u512_512_id_lpi_2;
-    end
-  end
-  always @(posedge clk) begin
-    if ( core_wen & (~((~((fsm_output[4]) | (fsm_output[1]))) | (xor_cse & (fsm_output[1]))
-        | ((~ exit_for_sva) & (fsm_output[4])))) ) begin
-      result_rsci_idat_26_0 <= MUX_v_27_2_2(27'b000000000000000100000000000, (sum_sva_mx0w1[31:5]),
-          fsm_output[4]);
     end
   end
   always @(posedge clk) begin
     if ( memory_send_aw_and_cse ) begin
       memory_channels_aw_channel_rsci_idat_36_35 <= MUX_v_2_2_2(memory_send_aw_memory_send_aw_nor_nl,
-          2'b11, (fsm_output[7]));
+          2'b11, (fsm_output[23]));
       memory_channels_w_channel_rsci_idat_96_65 <= MUX1HOT_v_32_4_2(32'b00010010001101000101011001111000,
           32'b00010001000100010010001000100010, 32'b00110011001100110100010001000100,
-          sum_sva, {or_tmp_7 , (fsm_output[5]) , (fsm_output[6]) , (fsm_output[7])});
+          sum_1_sva, {or_tmp_8 , (fsm_output[21]) , (fsm_output[22]) , (fsm_output[23])});
+    end
+  end
+  always @(posedge clk) begin
+    if ( core_wen & (fsm_output[20]) ) begin
+      result_rsci_idat <= div_cmp_z;
     end
   end
   always @(posedge clk or negedge arst_n) begin
@@ -2466,34 +2696,51 @@ module average_core (
     end
     else if ( memory_send_ar_and_cse ) begin
       memory_axi_read_base_axi_u512_512_id_lpi_2 <= nl_memory_axi_read_base_axi_u512_512_id_lpi_2[15:0];
-      exit_for_sva <= ~ ($signed(for_i_sva_2) < $signed(count_sva));
+      exit_for_sva <= ~ ($signed(({i_31_4_sva_3 , 4'b0000})) < $signed(count_sva));
     end
   end
   always @(posedge clk) begin
-    if ( core_wen & ((fsm_output[1]) | (fsm_output[4])) ) begin
-      sum_sva <= MUX_v_32_2_2(32'b00000000000000010000000000000000, sum_sva_mx0w1,
-          fsm_output[4]);
+    if ( core_wen & ((fsm_output[1]) | (fsm_output[5])) ) begin
+      sum_1_sva <= MUX_v_32_2_2(32'b00000000000000000000000000000000, sum_1_sva_1,
+          sum_not_1_nl);
     end
   end
   always @(posedge clk) begin
-    if ( and_80_cse ) begin
-      lshift_psp_sva <= lshift_itm;
+    if ( count_and_cse ) begin
       count_sva <= count_rsci_idat;
+      io_read_index_lo_rsc_cse_sva <= index_lo_rsci_idat;
+      acc_psp_sva <= nl_acc_psp_sva[31:0];
     end
   end
   always @(posedge clk) begin
     if ( core_wen & ((fsm_output[2:1]!=2'b00)) ) begin
-      for_i_sva <= MUX_v_32_2_2(32'b00000000000000000000000000000000, for_i_sva_2,
+      i_31_4_sva <= MUX_v_28_2_2(28'b0000000000000000000000000000, i_31_4_sva_3,
           (fsm_output[2]));
     end
   end
-  assign nl_memory_channels_ar_channel_rsci_idat_61_35  = (conv_s2s_26_27(for_i_sva[25:0])
-      + conv_s2s_26_27(lshift_psp_sva[31:6]));
-  assign memory_send_aw_mux_nl = MUX_v_2_2_2(2'b10, 2'b01, fsm_output[6]);
+  assign and_60_nl = and_dcpl_21 & and_dcpl_15 & (~((fsm_output[0]) | (fsm_output[5])
+      | (fsm_output[2])));
+  assign mux_nl = MUX_v_32_2_2(sum_1_sva_1, sum_1_sva, and_60_nl);
+  assign not_nl = ~ (fsm_output[1]);
+  assign and_62_nl = and_dcpl_21 & and_dcpl_15 & (~((fsm_output[0]) | (fsm_output[2])));
+  assign nl_for_for_acc_4_itm  = (sum_1_sva + (line_sva_1[31:0]) + (line_sva_1[63:32]));
+  assign nl_for_for_acc_5_itm  = ((line_sva_1[95:64]) + (line_sva_1[127:96]) + (line_sva_1[159:128]));
+  assign nl_for_for_acc_6_itm  = ((line_sva_1[191:160]) + (line_sva_1[223:192]) +
+      (line_sva_1[255:224]));
+  assign nl_for_for_acc_8_itm  = ((line_sva_1[287:256]) + (line_sva_1[319:288]) +
+      (line_sva_1[351:320]));
+  assign nl_for_for_acc_9_itm  = ((line_sva_1[383:352]) + (line_sva_1[415:384]) +
+      (line_sva_1[447:416]));
+  assign nl_for_for_acc_10_itm  = ((line_sva_1[479:448]) + (line_sva_1[511:480]));
+  assign nl_memory_channels_ar_channel_rsci_idat_92_39  = (conv_s2u_28_54(i_31_4_sva)
+      + ({acc_psp_sva , (io_read_index_lo_rsc_cse_sva[31:10])}));
+  assign memory_send_aw_mux_nl = MUX_v_2_2_2(2'b10, 2'b01, fsm_output[22]);
   assign memory_send_aw_memory_send_aw_nor_nl = ~(MUX_v_2_2_2(memory_send_aw_mux_nl,
-      2'b11, or_tmp_7));
+      2'b11, or_tmp_8));
   assign nl_memory_axi_read_base_axi_u512_512_id_lpi_2  = (memory_axi_read_base_axi_u512_512_id_lpi_2
       + 16'b0000000000000001);
+  assign sum_not_1_nl = ~ (fsm_output[1]);
+  assign nl_acc_psp_sva  = (index_hi_rsci_idat + conv_s2u_1_32(index_lo_rsci_idat[31]));
 
   function automatic [31:0] MUX1HOT_v_32_4_2;
     input [31:0] input_3;
@@ -2531,11 +2778,11 @@ module average_core (
   endfunction
 
 
-  function automatic [26:0] MUX_v_27_2_2;
-    input [26:0] input_0;
-    input [26:0] input_1;
+  function automatic [27:0] MUX_v_28_2_2;
+    input [27:0] input_0;
+    input [27:0] input_1;
     input  sel;
-    reg [26:0] result;
+    reg [27:0] result;
   begin
     case (sel)
       1'b0 : begin
@@ -2545,7 +2792,7 @@ module average_core (
         result = input_1;
       end
     endcase
-    MUX_v_27_2_2 = result;
+    MUX_v_28_2_2 = result;
   end
   endfunction
 
@@ -2596,10 +2843,18 @@ module average_core (
   endfunction
 
 
-  function automatic [26:0] conv_s2s_26_27 ;
-    input [25:0]  vector ;
+  function automatic [31:0] conv_s2u_1_32 ;
+    input  vector ;
   begin
-    conv_s2s_26_27 = {vector[25], vector};
+    conv_s2u_1_32 = {{31{vector}}, vector};
+  end
+  endfunction
+
+
+  function automatic [53:0] conv_s2u_28_54 ;
+    input [27:0]  vector ;
+  begin
+    conv_s2u_28_54 = {{26{vector[27]}}, vector};
   end
   endfunction
 

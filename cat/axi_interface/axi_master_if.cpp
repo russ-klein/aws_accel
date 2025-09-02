@@ -88,6 +88,8 @@ axi_data_type axi_master_interface::csim_memory_read(axi_address_type address, i
 
    axi_data_type ret = (axi_data_type) 0;
 
+   bool aligned = false;
+
    if (aligned) {
      for (int byte=0; byte<size; byte++) {
        byte_value = memory_store_byte_read((long) address + byte);
@@ -108,6 +110,8 @@ axi_data_type axi_master_interface::csim_memory_read(axi_address_type address, i
 void axi_master_interface::csim_memory_write(axi_address_type address, int size, axi_data_type data)
 {
    assert (size <= STRIDE);
+
+   bool aligned = false;
 
    if (aligned) {
      for (int byte=0; byte<size; byte++) {

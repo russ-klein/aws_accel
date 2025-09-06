@@ -6,16 +6,14 @@
 #include "ac_channel.h"
 
 #include "axi_master_if.h"
+
+#include "defines.h"
+
 #include "dense.h"
 
-#define INPUT_VECTOR_LENGTH 32 * 16
-#define OUTPUT_VECTOR_LENGTH 64 *16
-
-#define WRD_SIZE 16
-#define INTEGER_BITS 8
-
-typedef ac_fixed<WRD_SIZE, INTEGER_BITS, true> feature_type;
-typedef ac_fixed<WRD_SIZE, INTEGER_BITS, true> weight_type;
+#define INPUT_VECTOR_LENGTH  (32 * 16)
+#define OUTPUT_VECTOR_LENGTH (64 * 16)
+#define WEIGHT_SIZE (INPUT_VECTOR_LENGTH * OUTPUT_VECTOR_LENGTH)
 
 /*
 template<typename T>
@@ -37,26 +35,30 @@ T fixed(int x)
 
 float random_value(int n)
 {
-   int mask = (1 << (n - 4)) - 1;
-   int denom = (1 << (WRD_SIZE - INTEGER_BITS));
+   static int count = 0;
+   static float seed = 1.0 / 256.0;
+
+   int mask = (1 << (n - 6)) - 1;
+   int denom = (1 << (WORD_BITS - INTEGER_BITS));
    int value = rand() & mask;
  
    if (rand() & 1) value = value * -1;
 
-   return (float) value/denom;
+//return (((float) count++) * seed);
+   return (float) ((float) value/ (float) denom);
 }  
 
 template<typename T>
 void random_fill(int n, T *array)
 {
    for (int i=0; i<n; i++) {
-     array[i] = (T) random_value(WRD_SIZE);
+     array[i] = (T) random_value(WORD_BITS);
    }
 }
 
-void sw_dense(int inputs, int outputs, feature_type *f, weight_type *w, feature_type *out)
+void sw_dense(int inputs, int outputs, float *f, float *w, float *out)
 {
-   feature_type sum;
+   float sum;
 
    for (int o=0; o<outputs; o++) {
      sum = 0;
@@ -68,7 +70,33 @@ void sw_dense(int inputs, int outputs, feature_type *f, weight_type *w, feature_
 }
 
 
-void hw_dense(int inputs, int outputs, feature_type *f, weight_type *w, feature_type *out)
+void cat_dense(int inputs, int outputs, float *f, float *w, float *out)
+{
+   ac_fixed<WORD_BITS*2, INTEGER_BITS*2, true> sum;
+   feature_type cat_f[INPUT_VECTOR_LENGTH];
+   feature_type cat_o[OUTPUT_VECTOR_LENGTH];
+   weight_type  cat_w[WEIGHT_SIZE];
+
+   for (int i=0; i<inputs; i++) cat_f[i] = f[i];
+   for (int i=0; i<inputs * outputs; i++) cat_w[i] = w[i];
+
+   for (int o=0; o<outputs; o++) {
+     sum = 0.0;
+     for (int i=0; i<inputs; i++) {
+       sum += cat_f[i] * cat_w[o*inputs+i];
+
+printf("CAT w_index: %d f_index: %d feature: %f weight: %f \n",
+    o*inputs+i, i, (float) cat_f[i].to_double(), (float) cat_w[o*inputs+i].to_double());
+
+     }
+printf("CAT sum: %f \n", (float) sum.to_double());
+     cat_o[o] = sum;
+   }
+   for (int i=0; i<outputs; i++) out[i] = cat_o[i].to_double();
+}
+
+
+void hw_dense(int inputs, int outputs, float *f, float *w, float *out)
 {
    feature_type sum;
    axi_master_interface axi_bus;
@@ -76,25 +104,35 @@ void hw_dense(int inputs, int outputs, feature_type *f, weight_type *w, feature_
    ac_channel<bool> start;
    ac_channel<bool> done;
    axi_16 r;
-
    bool done_bit;
-  
-   // load features
-   for (int i=0; i<inputs; i++) axi_bus.write(i*(WRD_SIZE/8), f[i].slc<WRD_SIZE>(0));
 
-   // load weights
-   for (int i=0; i<inputs*outputs; i++) axi_bus.write(0x1000 + i * (WRD_SIZE/8), w[i].slc<WRD_SIZE>(0));
-
-   // start processing
-   start.write(true);
+   static feature_type cat_f[INPUT_VECTOR_LENGTH];
+   static feature_type cat_o[OUTPUT_VECTOR_LENGTH];
+   static weight_type  cat_w[WEIGHT_SIZE];
 
    const param_t use_relu = 0;
    const param_t hi_mem   = 0x00;
    const param_t feature_addr = 0x0;
-   const param_t weights_addr = 0x1000;
-   const param_t outputs_addr = 0x2000;
+   const param_t weights_addr = inputs * WORD_BYTES;
+   const param_t outputs_addr = weights_addr + inputs * outputs * WORD_BYTES;
    const axi_32  input_count = inputs;
    const axi_32  output_count = outputs;
+
+   // copy to cat format
+   for (int i=0; i<inputs; i++) cat_f[i] = f[i];
+   for (int i=0; i<inputs * outputs; i++) cat_w[i] = w[i];
+  
+   // load features
+   for (int i=0; i<inputs; i++) {
+     axi_bus.write(feature_addr + i * WORD_BYTES, cat_f[i].slc<WORD_BITS>(0));
+   }
+
+   // load weights
+   for (int i=0; i<inputs*outputs; i++) axi_bus.write(weights_addr + i * WORD_BYTES, cat_w[i].slc<WORD_BITS>(0));
+
+   // start processing
+   start.write(true);
+
 
    dense(
       start,
@@ -112,51 +150,86 @@ void hw_dense(int inputs, int outputs, feature_type *f, weight_type *w, feature_
 
    // read outputs
    for (int i=0; i<outputs; i++) {
-      axi_bus.read(0x2000 + i * (WRD_SIZE/8), r);
-      out[i] = r.to_double() / 255.0;
+     feature_type out_value;
+     ac_int<WORD_BITS, false> r;
+     axi_bus.read(outputs_addr + (i * WORD_BYTES), r);
+     out_value.set_slc(0, r);  
+     out[i] = out_value.to_double();
    } 
 }
 
-bool close(feature_type a, feature_type b)
+bool close(float a, float b, float margin)
 {
-  feature_type margin = 0.5;
-  feature_type delta = a - b;
+   float delta = a - b;
 
-  if (delta < 0) delta = delta * (feature_type) -1.0;
+   if (delta < 0) delta = delta * -1.0;
 
-  if (delta < margin) return true;
-  else                return false;
+   if (delta < margin) return true;
+   else                return false;
 }
+
+
+int compare(int n, float *a, float *b, char *s)
+{
+   int errors = 0;
+   float margin = 0.66;
+
+   for (int i=0; i<n; i++) {
+      if (!close(a[i], b[i], margin)) {
+         errors++;
+         printf("Error: %s[%d]: expected: %f received %f \n", s, i, a[i], b[i]);
+      }
+   }
+
+   return errors;
+}
+
 
 int main()
 {
    int i;
    int errors = 0;
 
-   feature_type features[INPUT_VECTOR_LENGTH];
-   weight_type  weights[INPUT_VECTOR_LENGTH * OUTPUT_VECTOR_LENGTH];
-   feature_type sw_outputs[OUTPUT_VECTOR_LENGTH];
-   feature_type hw_outputs[OUTPUT_VECTOR_LENGTH];
+   // static so we do not blow up the stack
+   static float features[INPUT_VECTOR_LENGTH];
+   static float weights[WEIGHT_SIZE];
+   static float sw_outputs[OUTPUT_VECTOR_LENGTH];
+   static float hw_outputs[OUTPUT_VECTOR_LENGTH];
+   static float cat_outputs[OUTPUT_VECTOR_LENGTH];
+   static float aws_outputs[OUTPUT_VECTOR_LENGTH];
 
-   random_fill<feature_type>(INPUT_VECTOR_LENGTH, features);
-   random_fill<weight_type>(INPUT_VECTOR_LENGTH * OUTPUT_VECTOR_LENGTH, weights);
+   const int num_inputs  = INPUT_VECTOR_LENGTH;
+   const int num_outputs = OUTPUT_VECTOR_LENGTH;
+   const int num_weights = WEIGHT_SIZE;
 
-   sw_dense(INPUT_VECTOR_LENGTH, OUTPUT_VECTOR_LENGTH, features, weights, sw_outputs);
+   random_fill(num_weights, weights);
+   random_fill(num_inputs, features);
+
+   printf("Computing reference values \n");
+   sw_dense(num_inputs, num_outputs, features, weights, sw_outputs);
+
+   printf("Computing quantized values \n");
+   cat_dense(num_inputs, num_outputs, features, weights, cat_outputs);
    
-   hw_dense(INPUT_VECTOR_LENGTH, OUTPUT_VECTOR_LENGTH, features, weights, hw_outputs);
+   printf("Computing architected values \n");
+   hw_dense(num_inputs, num_outputs, features, weights, hw_outputs);
+
+   // aws_dense(num_inputs, num_outputs, features, weights, aws_outputs);
 
    // compare results
   
-   for (i=0; i<OUTPUT_VECTOR_LENGTH; i++) {
-     if (!close(sw_outputs[i], hw_outputs[i])) {
-       printf("error: sw result: %f hw result: %f \n", sw_outputs[i].to_double(), hw_outputs[i].to_double());
-       errors++;
-     }
-   }
+   errors += compare(num_outputs, sw_outputs, cat_outputs, (char *) "cat");
+   printf("Quantized values: %d errors \n", errors);
+
+   errors += compare(num_outputs, sw_outputs, hw_outputs, (char *) "hw");
+   printf("Architected values: %d errors \n", errors);
+
+   // errors += compare(num_outputs, sw_outputs, aws_outputs, (char *) "aws");
+   // printf("FPGA values: %d errors \n", errors);
 
    if (errors > 0) {
-     printf("test failed: %d errors of %d values \n", errors, OUTPUT_VECTOR_LENGTH); 
+     printf("test failed: %d errors of %d values \n", errors, num_outputs); 
    } else {
-     printf("test passed \n");
+     printf("test passed: %d errors \n", errors);
    }
 }

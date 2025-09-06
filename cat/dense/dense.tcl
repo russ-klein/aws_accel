@@ -43,6 +43,8 @@ directive set -CLOCKS {
    }
 }
 
+directive set /dense/core/sum_array:rsc -MAP_TO_MODULE {[Register]}
+
 go assembly
 go architect
 go allocate

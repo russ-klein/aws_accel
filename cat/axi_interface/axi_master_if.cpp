@@ -1,7 +1,12 @@
 
 #include "axi_master_if.h"
 
-axi_master_interface::axi_master_interface() {};
+axi_master_interface::axi_master_interface() 
+{
+#ifdef C_SIMULATION
+  for (int i=0; i<0x10000; i++) memory_store_index[i] = (unsigned char *) NULL;
+#endif
+};
 
 axi_master_interface::~axi_master_interface() {};
 
@@ -62,7 +67,13 @@ void axi_master_interface::memory_store_byte_write(long long address, unsigned c
    unsigned char   *memory_page;
 
    if ((memory_store_index[(address>>16) & 0xFFFF]) == NULL) {
-     memory_store_index[(address>>16) & 0xFFFF] = (unsigned char *) malloc(0x10000 * sizeof(unsigned char *));
+     unsigned char *p = (unsigned char *) malloc(0x10000 * sizeof(unsigned char));
+     if (p == NULL) {
+       fprintf(stderr, "Out of memory, malloc failed \n");
+       perror("axi_bus");
+       exit(47);
+     } 
+     memory_store_index[(address>>16) & 0xFFFF] = p; // (unsigned char *) malloc(0x10000 * sizeof(unsigned char));
    }
    memory_page = memory_store_index[(address>>16) & 0xFFFF];
 

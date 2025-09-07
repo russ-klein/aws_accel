@@ -10,6 +10,7 @@
 #include "defines.h"
 
 #include "dense.h"
+#include "timer.h"
 
 #define INPUT_VECTOR_LENGTH  (32 * 16)
 #define OUTPUT_VECTOR_LENGTH (64 * 16)
@@ -60,6 +61,7 @@ void sw_dense(int inputs, int outputs, float *f, float *w, float *out)
 {
    float sum;
 
+   timer_start();
    for (int o=0; o<outputs; o++) {
      sum = 0;
      for (int i=0; i<inputs; i++) {
@@ -67,6 +69,7 @@ void sw_dense(int inputs, int outputs, float *f, float *w, float *out)
      }
      out[o] = sum;
    }
+   printf("Time for software: %d milliseconds \n", timer_stop());
 }
 
 
@@ -80,18 +83,20 @@ void cat_dense(int inputs, int outputs, float *f, float *w, float *out)
    for (int i=0; i<inputs; i++) cat_f[i] = f[i];
    for (int i=0; i<inputs * outputs; i++) cat_w[i] = w[i];
 
+   timer_start();
    for (int o=0; o<outputs; o++) {
      sum = 0.0;
      for (int i=0; i<inputs; i++) {
        sum += cat_f[i] * cat_w[o*inputs+i];
 
-printf("CAT w_index: %d f_index: %d feature: %f weight: %f \n",
-    o*inputs+i, i, (float) cat_f[i].to_double(), (float) cat_w[o*inputs+i].to_double());
+//printf("CAT w_index: %d f_index: %d feature: %f weight: %f \n",
+//    o*inputs+i, i, (float) cat_f[i].to_double(), (float) cat_w[o*inputs+i].to_double());
 
      }
-printf("CAT sum: %f \n", (float) sum.to_double());
+//printf("CAT sum: %f \n", (float) sum.to_double());
      cat_o[o] = sum;
    }
+   printf("Time for quantized: %d milliseconds \n", timer_stop());
    for (int i=0; i<outputs; i++) out[i] = cat_o[i].to_double();
 }
 
@@ -133,7 +138,7 @@ void hw_dense(int inputs, int outputs, float *f, float *w, float *out)
    // start processing
    start.write(true);
 
-
+   timer_start();
    dense(
       start,
       done,
@@ -146,6 +151,7 @@ void hw_dense(int inputs, int outputs, float *f, float *w, float *out)
       output_count,
       axi_bus);
 
+   printf("Time for architected: %d milliseconds \n", timer_stop());
    done_bit = done.read();
 
    // read outputs

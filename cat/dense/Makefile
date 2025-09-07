@@ -24,6 +24,7 @@ OBJS         += testbench.o
 OBJS         += dense.o 
 OBJS         += axi_master_if.o 
 #OBJS         += aws_dense.o
+OBJS         += timer.o 
 
 testbench: $(OBJS)
 	$(LD) -o testbench $(OBJS)
@@ -39,6 +40,9 @@ dense.o: dense.cpp defines.h
 
 aws_dense.o: aws_dense.cpp
 	$(GCC) $(GCC_FLAGS) -c aws_dense.cpp 
+
+timer.o: timer.cpp
+	$(GCC) $(GCC_FLAGS) -c timer.cpp
 
 $(FUNCTION).sv: $(FUNCTION).cpp $(FUNCTION).tcl 
 	rm -rf $(CRUFT)_

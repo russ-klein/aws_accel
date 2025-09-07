@@ -82,7 +82,7 @@ void dense(ac_channel<bool>     &start,
        weight_cache_offset = weight_index & weight_mask;
 
        if (weight_cache_offset == 0) {
-printf("fresh weights read from address: %08x \n", weight_address + weight_index * stride * WORD_BYTES);
+//printf("fresh weights read from address: %08x \n", weight_address + weight_index * stride * WORD_BYTES);
           memory.burst_read(weight_address + weight_index * stride * WORD_BYTES, weight_memory, burst_size);
        }
 
@@ -98,8 +98,8 @@ printf("fresh weights read from address: %08x \n", weight_address + weight_index
          feature.set_slc(0, feature_line.slc<WORD_BITS>(w*WORD_BITS));
          weight.set_slc(0, weight_line.slc<WORD_BITS>(w*WORD_BITS)); 
 
-printf("HW w_index: %d f_index: %d feature: %f weight: %f \n", 
-    weight_index * 32 + w, in_index * 32 + w, (float) feature.to_double(), (float) weight.to_double());
+// printf("HW w_index: %d f_index: %d feature: %f weight: %f \n", 
+//     weight_index * 32 + w, in_index * 32 + w, (float) feature.to_double(), (float) weight.to_double());
 
          sum_array[w] += feature * weight;
        }
@@ -111,7 +111,7 @@ printf("HW w_index: %d f_index: %d feature: %f weight: %f \n",
        sum += sum_array[w];
      }
 
-printf("HW sum: %f \n", (float) sum.to_double());
+// printf("HW sum: %f \n", (float) sum.to_double());
 
      feature_type sum_out = sum;
      index_t line_index = out_index & INDEX_MASK;

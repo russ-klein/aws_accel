@@ -40,10 +40,9 @@ void average(ac_channel<bool>     &start,
    sum = 0;
 
   #pragma hls_initiation_interval 1
-   for (i=0; i<count; i+=16) {
+   for (i=0; i<count; i++) {
 
-     addr = base + i * 0x40;
-     memory.read(addr, line);
+     memory.read(base, line);
 
     #pragma hls_unroll
      for (int j=0; j<16; j++) {
@@ -52,7 +51,7 @@ void average(ac_channel<bool>     &start,
      }
    }
 
-   addr = base + count * 4 + 0x40;
+   // addr = base + count * 4 + 0x40;
 
    result = sum / count;
 

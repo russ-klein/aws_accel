@@ -8,4 +8,5 @@ void dense(ac_channel<bool>     &start,
            param_t               output_addr_lo, 
            axi_32                input_vector_len, 
            axi_32                output_vector_len, 
+	   axi_32               &debug,
            axi_master_interface &memory);

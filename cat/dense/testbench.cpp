@@ -110,6 +110,7 @@ void hw_dense(int inputs, int outputs, float *f, float *w, float *out)
    ac_channel<bool> done;
    axi_16 r;
    bool done_bit;
+   axi_32 debug;
 
    static feature_type cat_f[INPUT_VECTOR_LENGTH];
    static feature_type cat_o[OUTPUT_VECTOR_LENGTH];
@@ -149,6 +150,7 @@ void hw_dense(int inputs, int outputs, float *f, float *w, float *out)
       outputs_addr,
       input_count,
       output_count,
+      debug,
       axi_bus);
 
    printf("Time for architected: %d milliseconds \n", timer_stop());

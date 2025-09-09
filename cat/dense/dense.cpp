@@ -9,15 +9,16 @@
 // #pragma busifc_cfg slave_0 DataWidth=32 BaseAddress=0 Protocol=axi4lite
 #pragma hls_design top
 void dense(ac_channel<bool>     &start, 
-             ac_channel<bool>     &done,
-             bool                  use_relu, 
-             param_t               addr_hi, 
-             param_t               feature_addr_lo, 
-             param_t               weight_addr_lo, 
-             param_t               output_addr_lo, 
-             axi_32                input_vector_len, 
-             axi_32                output_vector_len, 
-             axi_master_interface &memory)
+           ac_channel<bool>     &done,
+           bool                  use_relu, 
+           param_t               addr_hi, 
+           param_t               feature_addr_lo, 
+           param_t               weight_addr_lo, 
+           param_t               output_addr_lo, 
+           axi_32                input_vector_len, 
+           axi_32                output_vector_len, 
+	   axi_32               &debug,
+           axi_master_interface &memory)
 {
 // #pragma busifc go                 WordOffset=0 Slave=slave_0
 // #pragma busifc done               WordOffset=2 Slave=slave_0
@@ -45,6 +46,8 @@ void dense(ac_channel<bool>     &start,
 
    go = start.read();
 
+   debug = -1;
+
    weight_address  = addr_hi + weight_addr_lo;
    feature_address = addr_hi + feature_addr_lo;
    output_address  = addr_hi + output_addr_lo;
@@ -69,8 +72,17 @@ void dense(ac_channel<bool>     &start,
    ac_int<LEN_BITS, false> weight_cache_offset;
    const ac_int<32, false> weight_mask = ((1 << LEN_BITS) - 1);
 
+   debug = 0xa5;
+
+   for (int i=0; i<16; i++) {
+     memory.write(0x1000000 + i * 4, (axi_32) i);
+   }
+
+   debug = 0x5a;
 
    while (out_index<output_vector_len) {
+debug = out_index;
+printf("debug: %d \n", debug.to_int()); 
     #pragma hls_unroll
      for (int w=0; w<stride; w++) {
        sum_array[w] = 0;

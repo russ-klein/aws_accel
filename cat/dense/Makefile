@@ -50,7 +50,7 @@ $(FUNCTION).sv: $(FUNCTION).cpp $(FUNCTION).tcl
 	cp Catapult/$(FUNCTION).v1/concat_rtl.v $(FUNCTION).sv
 	#cp Catapult/$(FUNCTION).v1/rtl_csr_wrapper.v $(FUNCTION)_wrapper.sv
 	#cp Catapult/$(FUNCTION).v1/rtl_csr_blocks.v rtl_csr_blocks.sv
-	cp $(CATAPULT_HOME)/pkgs/sif/userware/En_na/flows/ccs_axi4lite2adc.v ccs_axi4lite2adc.sv
+	#cp $(CATAPULT_HOME)/pkgs/sif/userware/En_na/flows/ccs_axi4lite2adc.v ccs_axi4lite2adc.sv
 
 clean:
 	rm -rf $(CRUFT)

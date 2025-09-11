@@ -23,6 +23,7 @@ solution library add Xilinx_ROMS
 solution library add Xilinx_FIFO
 
 directive set /dense/core -DESIGN_GOAL Latency
+directive set /dense -TRANSACTION_DONE_SIGNAL false
 
 go libraries
 

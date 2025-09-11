@@ -20,15 +20,16 @@ void dense(ac_channel<bool>     &start,
 	   axi_32               &debug,
            axi_master_interface &memory)
 {
-// #pragma busifc go                 WordOffset=0 Slave=slave_0
+// #pragma busifc start              WordOffset=0 Slave=slave_0
 // #pragma busifc done               WordOffset=2 Slave=slave_0
 // #pragma busifc use_relu           WordOffset=4 Slave=slave_0
 // #pragma busifc addr_hi            WordOffset=5 Slave=slave_0
-// #pragma busifc feature_addr       WordOffset=6 Slave=slave_0
-// #pragma busifc weight_addr        WordOffset=7 Slave=slave_0
-// #pragma busifc output_addr        WordOffset=8 Slave=slave_0
+// #pragma busifc feature_addr_lo    WordOffset=6 Slave=slave_0
+// #pragma busifc weight_addr_lo     WordOffset=7 Slave=slave_0
+// #pragma busifc output_addr_lo     WordOffset=8 Slave=slave_0
 // #pragma busifc input_vector_len   WordOffset=9 Slave=slave_0
 // #pragma busifc output_vector_len  WordOffset=10 Slave=slave_0
+// #pragma busifc debug              WordOffset=11 Slave=slave_0
 
    const int stride = (BUS_SIZE / WORD_BITS);
    const int burst_size = (1 << LEN_BITS);

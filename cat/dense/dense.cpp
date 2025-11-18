@@ -4,32 +4,30 @@
 #include <mc_scverify.h>
 #include <axi_master_if.h>
 
-#include "defines.h"
+#include "defines.hpp"
 
 // #pragma busifc_cfg slave_0 DataWidth=32 BaseAddress=0 Protocol=axi4lite
 #pragma hls_design top
 void dense(ac_channel<bool>     &start, 
-           ac_channel<bool>     &done,
-           bool                  use_relu, 
-           param_t               addr_hi, 
-           param_t               feature_addr_lo, 
-           param_t               weight_addr_lo, 
-           param_t               output_addr_lo, 
-           axi_32                input_vector_len, 
-           axi_32                output_vector_len, 
-	   axi_32               &debug,
-           axi_master_interface &memory)
+             ac_channel<bool>     &done,
+             bool                  use_relu, 
+             param_t               addr_hi, 
+             param_t               feature_addr_lo, 
+             param_t               weight_addr_lo, 
+             param_t               output_addr_lo, 
+             axi_32                input_vector_len, 
+             axi_32                output_vector_len, 
+             axi_master_interface &memory)
 {
-// #pragma busifc start              WordOffset=0 Slave=slave_0
+// #pragma busifc go                 WordOffset=0 Slave=slave_0
 // #pragma busifc done               WordOffset=2 Slave=slave_0
 // #pragma busifc use_relu           WordOffset=4 Slave=slave_0
 // #pragma busifc addr_hi            WordOffset=5 Slave=slave_0
-// #pragma busifc feature_addr_lo    WordOffset=6 Slave=slave_0
-// #pragma busifc weight_addr_lo     WordOffset=7 Slave=slave_0
-// #pragma busifc output_addr_lo     WordOffset=8 Slave=slave_0
+// #pragma busifc feature_addr       WordOffset=6 Slave=slave_0
+// #pragma busifc weight_addr        WordOffset=7 Slave=slave_0
+// #pragma busifc output_addr        WordOffset=8 Slave=slave_0
 // #pragma busifc input_vector_len   WordOffset=9 Slave=slave_0
 // #pragma busifc output_vector_len  WordOffset=10 Slave=slave_0
-// #pragma busifc debug              WordOffset=11 Slave=slave_0
 
    const int stride = (BUS_SIZE / WORD_BITS);
    const int burst_size = (1 << LEN_BITS);
@@ -46,8 +44,6 @@ void dense(ac_channel<bool>     &start,
    bool go;
 
    go = start.read();
-
-   debug = -1;
 
    weight_address  = addr_hi + weight_addr_lo;
    feature_address = addr_hi + feature_addr_lo;
@@ -73,17 +69,8 @@ void dense(ac_channel<bool>     &start,
    ac_int<LEN_BITS, false> weight_cache_offset;
    const ac_int<32, false> weight_mask = ((1 << LEN_BITS) - 1);
 
-   debug = 0xa5;
-
-   for (int i=0; i<16; i++) {
-     memory.write(0x1000000 + i * 4, (axi_32) i);
-   }
-
-   debug = 0x5a;
 
    while (out_index<output_vector_len) {
-debug = out_index;
-printf("debug: %d \n", debug.to_int()); 
     #pragma hls_unroll
      for (int w=0; w<stride; w++) {
        sum_array[w] = 0;

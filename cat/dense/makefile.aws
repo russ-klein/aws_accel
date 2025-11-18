@@ -1,0 +1,44 @@
+
+
+AWS_HOME    = /home/ubuntu/aws-fpga
+
+GCC         = gcc
+G++         = g++
+LD          = g++
+
+G++_FLAGS  += -I ../cat_include
+G++_FLAGS  += -I ../axi_interface
+G++_FLAGS  += -g
+G++_FLAGS  += -D AWS
+G++_FLAGS  += -D C_SIMULATION
+
+GCC_FLAGS  += -g
+GCC_FLAGS  += -I $(AWS_HOME)/sdk/userspace/include 
+GCC_FLAGS  += -I $(AWS_HOME)/sdk/userspace/utils
+
+LD_FLAGS   += -lfpga_mgmt
+
+#gcc average_test.c -o average_test -I ../../../../../../sdk/userspace/include/ -lfpga_mgmt
+
+OBJECTS = dense.o testbench.o timer.o aws_dense.o axi_master_if.o
+SOURCES = dense.cpp testbench.cpp timer.cpp aws_dense.cpp
+HEADERS = dense.h aws_dense.h timer.h
+
+testbench: $(OBJECTS)
+	$(LD) -o testbench $(OBJECTS) $(LD_FLAGS)
+
+testbench.o: $(HEADERS) testbench.cpp
+	$(G++) $(G++_FLAGS) -c -o testbench.o testbench.cpp
+
+dense.o: $(HEADERS) dense.cpp
+	$(G++) $(G++_FLAGS) -c -o dense.o dense.cpp
+
+axi_master_if.o: $(HEADERS) ../axi_interface/axi_master_if.cpp
+	$(G++) $(G++_FLAGS) -c -o axi_master_if.o ../axi_interface/axi_master_if.cpp
+
+timer.o: $(HEADERS) timer.cpp
+	$(G++) $(G++_FLAGS) -c -o timer.o timer.cpp
+
+aws_dense.o: $(HEADERS) aws_dense.c
+	$(GCC) $(GCC_FLAGS) -c -o aws_dense.o aws_dense.c
+

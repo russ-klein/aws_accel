@@ -13,25 +13,22 @@
 /* 
  * Things I always need to look up about AXI
  *
- * LEN is the length of a burst - 1:  (should be called NUM_BEATS)
+ * LEN is the length of a burst - 1:
  *      0 is a 1 beat burst, 
  *      1 is a 2 beat burst, etc
  *
- * BURST is the type of burst cycle   (should be called BURST_TYPE)
+ * BURST is the type of burst cycle
  *      00 = fixed (always same address)
  *      01 = increment (start at lowest address and increment)
  *      10 = wrap (start at address and wrap on cache line boundary,
  *                 delivers cache miss value first)
  *      11 = reserved (don't use it)
  *
- * SIZE is the size of the read on the bus of 8 * 2^size bits (should be called BUS_SIZE)
+ * SIZE is the size of the read on the bus of 8 * 2^size bits
  *      0 = 8 bits
  *      1 = 16 bits
  *      2 = 32 bits
  *      3 = 64 bits, etc
- *
- *      "BUS_SIZE" is the number of bits in a full bus access
- *      "STRIDE" is the number bytes in a full bus access
  *
  * RESP 
  *      00 = OK
@@ -40,52 +37,69 @@
  *      11 = decode error (no such address)
  */
 
-#define AXI_BURST_FIXED 0
-#define AXI_BURST_INCR  1
-#define AXI_BURST_WRAP  2
+typedef ac_int<QOS_BITS,      false>    axi_qos_type;
+typedef ac_int<REGION_BITS,   false>    axi_region_type;
+typedef ac_int<PROT_BITS,     false>    axi_prot_type;
+typedef ac_int<CACHE_BITS,    false>    axi_cache_type;
+typedef ac_int<LOCK_BITS,     false>    axi_lock_type;
+typedef ac_int<BURST_BITS,    false>    axi_burst_type;
+typedef ac_int<SIZE_BITS,     false>    axi_asize_type;
+typedef ac_int<LEN_BITS,      false>    axi_len_type;
+typedef ac_int<ADDRESS_BITS,  false>    axi_address_type;
+typedef ac_int<READ_ID_BITS,  false>    axi_read_id_type;
+typedef ac_int<WRITE_ID_BITS, false>    axi_write_id_type;
+typedef ac_int<1,             false>    axi_last_type;
+typedef ac_int<BYTE_BITS,     false>    axi_strb_type;
+typedef ac_int<BUS_SIZE,      false>    axi_data_type;
+typedef ac_int<RESP_BITS,     false>    axi_resp_type;
+
+typedef ac_int<WORD_SIZE,     false>    axi_base_data_type;
+typedef ac_int<16,            true>     axi_size_type;   // maximum bytes to transfer on a bulk read/write
+                                                         // set to arbitrary size, not axi protocol specific
+
 
 typedef struct {
-    ac_int<QOS_BITS,      false>    qos;
-    ac_int<REGION_BITS,   false>    region;
-    ac_int<PROT_BITS,     false>    prot;
-    ac_int<CACHE_BITS,    false>    cache;
-    ac_int<LOCK_BITS,     false>    lock;
-    ac_int<BURST_BITS,    false>    burst;
-    ac_int<SIZE_BITS,     false>    size;
-    ac_int<LEN_BITS,      false>    len;
-    ac_int<ADDRESS_BITS,  false>    address;
-    ac_int<READ_ID_BITS,  false>    id;
+    axi_qos_type       qos;
+    axi_region_type    region;
+    axi_prot_type      prot;
+    axi_cache_type     cache;
+    axi_lock_type      lock;
+    axi_burst_type     burst;
+    axi_asize_type     size;
+    axi_len_type       len;
+    axi_address_type   address;
+    axi_read_id_type   id;
 } ar_payload;
 
 typedef struct {
-    ac_int<QOS_BITS,      false>    qos;
-    ac_int<REGION_BITS,   false>    region;
-    ac_int<PROT_BITS,     false>    prot;
-    ac_int<CACHE_BITS,    false>    cache;
-    ac_int<LOCK_BITS,     false>    lock;
-    ac_int<BURST_BITS,    false>    burst;
-    ac_int<SIZE_BITS,     false>    size;
-    ac_int<LEN_BITS,      false>    len;
-    ac_int<ADDRESS_BITS,  false>    address;
-    ac_int<WRITE_ID_BITS, false>    id;
+    axi_qos_type       qos;
+    axi_region_type    region;
+    axi_prot_type      prot;
+    axi_cache_type     cache;
+    axi_lock_type      lock;
+    axi_burst_type     burst;
+    axi_asize_type     size;
+    axi_len_type       len;
+    axi_address_type   address;
+    axi_write_id_type  id;
 } aw_payload;
 
 typedef struct {
-    ac_int<1,             false>    last;
-    ac_int<BYTE_BITS,     false>    strb;
-    ac_int<BUS_SIZE,      false>    data;
+    axi_last_type      last;
+    axi_strb_type      strb;
+    axi_data_type      data;
 } w_payload;
 
 typedef struct {
-    ac_int<1,             false>    last;
-    ac_int<RESP_BITS,     false>    resp;
-    ac_int<BUS_SIZE,      false>    data;
-    ac_int<READ_ID_BITS,  false>    id;
+    axi_last_type      last;
+    axi_resp_type      resp;
+    axi_data_type      data;
+    axi_read_id_type   id;
 } r_payload;
 
 typedef struct {
-    ac_int<RESP_BITS,     false>    resp;
-    ac_int<WRITE_ID_BITS, false>    id;
+    axi_resp_type      resp;
+    axi_write_id_type  id;
 } b_payload;
 
 typedef struct {
@@ -134,12 +148,6 @@ typedef ac_int<1024, false>          axi_u1024;
 typedef ac_ieee_float32              axi_float;
 typedef ac_ieee_float64              axi_double;
 
-typedef ac_int<WORD_SIZE, false>     axi_base_data_type;
-typedef ac_int<BUS_SIZE, false>      axi_data_type;
-typedef ac_int<ADDRESS_BITS, false>  axi_address_type;
-typedef ac_int<RESP_BITS, false>     axi_resp_type;
-typedef ac_int<16, false>            axi_size_type;   // maximum bytes to transfer on a bulk read/write
-                                                      // set to arbitrary size, not axi protocol specific
 
 // Page size = 4K, this is used to prevent bursts from crossing 4K boundary
 
@@ -148,10 +156,7 @@ typedef ac_int<16, false>            axi_size_type;   // maximum bytes to transf
 
 class axi_master_interface {
 
-#ifdef C_SIMULATION
 private:
-
-    // for C simulation only
     long long   csim_r_address;
     long        csim_r_size;
     long        csim_r_count;
@@ -160,10 +165,11 @@ private:
     long        csim_w_size;
     long        csim_w_count;
     long        csim_w_id;
-#endif
+    
 
 public:
     axi_bus_signals channels;
+    bool aligned;
 
     ac_int<64, false> debug_signal;
 
@@ -179,23 +185,15 @@ public:
     void send_ar(ar_payload &ar);
     void get_r  (r_payload  &r);
 
-
     void tb_memory_write(long long address, int count, unsigned char *data);
     void tb_memory_read (long long address, int count, unsigned char *data);
-
-#ifdef C_SIMULATION
-
-    // non synthesizable behavioral C model for C simulations only
-
-    axi_data_type csim_memory_read(axi_address_type address, int size);
-    void csim_memory_write(axi_address_type address, int size, axi_data_type data);
-
-    unsigned char *memory_store_index[0x10000];
-
-    bool aligned;
-#endif
+    ac_int<BYTE_BITS, false> set_strb(const axi_size_type start_offset, const axi_size_type end_offset, bool first, bool last);
+    void csim_memory_read(axi_address_type address, long size, axi_data_type *data);
+    void csim_memory_write(axi_address_type address, long size, axi_data_type *data, ac_int<BYTE_BITS, false> strb);
 
     ac_int<BUS_BITS+1, false> ones(ac_int<BYTE_BITS, false> bytes);
+
+    unsigned char *memory_store_index[0x10000];
 
     void memory_store_byte_write(long long address, unsigned char data);
     unsigned char memory_store_byte_read(long long address);
@@ -203,26 +201,14 @@ public:
     template <typename datatype, int size>
     axi_resp_type axi_burst_read_base(axi_address_type address, datatype *data_out, axi_size_type count);
 
-    template <typename datatype, int size>
-    axi_resp_type axi_burst_read_real_base(axi_address_type address, datatype *data_out, axi_size_type count);
+    //template <typename datatype, int size>
+    //axi_resp_type axi_burst_read_real_base(axi_address_type address, datatype *data_out, axi_size_type count);
 
-    template <typename datatype, int size>
-    axi_resp_type axi_read_base(axi_address_type address, datatype &data_in);
-
-    template <typename datatype, int size>
-    axi_resp_type axi_read_real(axi_address_type address, datatype &data_in);
-
-    template <typename datatype, int size>
+    template <typename datatype, int bit_shift>
     axi_resp_type axi_burst_write_base(axi_address_type address, datatype *data_out, axi_size_type count);
 
-    template <typename datatype, int size>
-    axi_resp_type axi_burst_write_real_base(axi_address_type address, datatype *data_out, axi_size_type count);
-
-    template <typename datatype, int size>
-    axi_resp_type axi_write_base(axi_address_type address, datatype data_out);
-
-    template <typename datatype, int size>
-    axi_resp_type axi_write_real(axi_address_type address, datatype data_out);
+    //template <typename datatype, int size>
+    //axi_resp_type axi_burst_write_real_base(axi_address_type address, datatype *data_out, axi_size_type count);
 
     axi_resp_type read(axi_address_type address, axi_8       &data_in);
     axi_resp_type read(axi_address_type address, axi_u8      &data_in);
@@ -232,14 +218,6 @@ public:
     axi_resp_type read(axi_address_type address, axi_u32     &data_in);
     axi_resp_type read(axi_address_type address, axi_64      &data_in);
     axi_resp_type read(axi_address_type address, axi_u64     &data_in);
-    axi_resp_type read(axi_address_type address, axi_128     &data_in);
-    axi_resp_type read(axi_address_type address, axi_u128    &data_in);
-    axi_resp_type read(axi_address_type address, axi_256     &data_in);
-    axi_resp_type read(axi_address_type address, axi_u256    &data_in);
-    axi_resp_type read(axi_address_type address, axi_512     &data_in);
-    axi_resp_type read(axi_address_type address, axi_u512    &data_in);
-    axi_resp_type read(axi_address_type address, axi_1024    &data_in);
-    axi_resp_type read(axi_address_type address, axi_u1024   &data_in);
     axi_resp_type read(axi_address_type address, axi_float   &data_in);
     axi_resp_type read(axi_address_type address, axi_double  &data_in);
 
@@ -251,54 +229,46 @@ public:
     axi_resp_type write(axi_address_type address, axi_u32     data_out);
     axi_resp_type write(axi_address_type address, axi_64      data_out);
     axi_resp_type write(axi_address_type address, axi_u64     data_out);
-    axi_resp_type write(axi_address_type address, axi_128     data_out);
-    axi_resp_type write(axi_address_type address, axi_u128    data_out);
-    axi_resp_type write(axi_address_type address, axi_256     data_out);
-    axi_resp_type write(axi_address_type address, axi_u256    data_out);
-    axi_resp_type write(axi_address_type address, axi_512     data_out);
-    axi_resp_type write(axi_address_type address, axi_u512    data_out);
-    axi_resp_type write(axi_address_type address, axi_1024    data_out);
-    axi_resp_type write(axi_address_type address, axi_u1024   data_out);
     axi_resp_type write(axi_address_type address, axi_float   data_out);
     axi_resp_type write(axi_address_type address, axi_double  data_out);
 
-    axi_resp_type burst_read (axi_address_type address, axi_8      *data, axi_size_type size);
-    axi_resp_type burst_read (axi_address_type address, axi_u8     *data, axi_size_type size);
-    axi_resp_type burst_read (axi_address_type address, axi_16     *data, axi_size_type size);
-    axi_resp_type burst_read (axi_address_type address, axi_u16    *data, axi_size_type size);
-    axi_resp_type burst_read (axi_address_type address, axi_32     *data, axi_size_type size);
-    axi_resp_type burst_read (axi_address_type address, axi_u32    *data, axi_size_type size);
-    axi_resp_type burst_read (axi_address_type address, axi_64     *data, axi_size_type size);
-    axi_resp_type burst_read (axi_address_type address, axi_u64    *data, axi_size_type size);
-    axi_resp_type burst_read (axi_address_type address, axi_128    *data, axi_size_type size);
-    axi_resp_type burst_read (axi_address_type address, axi_u128   *data, axi_size_type size);
-    axi_resp_type burst_read (axi_address_type address, axi_256    *data, axi_size_type size);
-    axi_resp_type burst_read (axi_address_type address, axi_u256   *data, axi_size_type size);
-    axi_resp_type burst_read (axi_address_type address, axi_512    *data, axi_size_type size);
-    axi_resp_type burst_read (axi_address_type address, axi_u512   *data, axi_size_type size);
-    axi_resp_type burst_read (axi_address_type address, axi_1024   *data, axi_size_type size);
-    axi_resp_type burst_read (axi_address_type address, axi_u1024  *data, axi_size_type size);
-    axi_resp_type burst_read (axi_address_type address, axi_float  *data, axi_size_type size);
-    axi_resp_type burst_read (axi_address_type address, axi_double *data, axi_size_type size);
+    axi_resp_type burst_read (axi_address_type address, axi_8         *data, axi_size_type size);
+    axi_resp_type burst_read (axi_address_type address, axi_u8        *data, axi_size_type size);
+    axi_resp_type burst_read (axi_address_type address, axi_16        *data, axi_size_type size);
+    axi_resp_type burst_read (axi_address_type address, axi_u16       *data, axi_size_type size);
+    axi_resp_type burst_read (axi_address_type address, axi_32        *data, axi_size_type size);
+    axi_resp_type burst_read (axi_address_type address, axi_u32       *data, axi_size_type size);
+    axi_resp_type burst_read (axi_address_type address, axi_64        *data, axi_size_type size);
+    axi_resp_type burst_read (axi_address_type address, axi_u64       *data, axi_size_type size);
+    axi_resp_type burst_read (axi_address_type address, axi_128       *data, axi_size_type size);
+    axi_resp_type burst_read (axi_address_type address, axi_u128      *data, axi_size_type size);
+    axi_resp_type burst_read (axi_address_type address, axi_256       *data, axi_size_type size);
+    axi_resp_type burst_read (axi_address_type address, axi_u256      *data, axi_size_type size);
+    axi_resp_type burst_read (axi_address_type address, axi_512       *data, axi_size_type size);
+    axi_resp_type burst_read (axi_address_type address, axi_u512      *data, axi_size_type size);
+    axi_resp_type burst_read (axi_address_type address, axi_1024      *data, axi_size_type size);
+    axi_resp_type burst_read (axi_address_type address, axi_u1024     *data, axi_size_type size);
+    // axi_resp_type burst_read (axi_address_type address, axi_float  *data, axi_size_type size);
+    // axi_resp_type burst_read (axi_address_type address, axi_double *data, axi_size_type size);
 
-    axi_resp_type burst_write(axi_address_type address, axi_8      *data, axi_size_type size);
-    axi_resp_type burst_write(axi_address_type address, axi_u8     *data, axi_size_type size);
-    axi_resp_type burst_write(axi_address_type address, axi_16     *data, axi_size_type size);
-    axi_resp_type burst_write(axi_address_type address, axi_u16    *data, axi_size_type size);
-    axi_resp_type burst_write(axi_address_type address, axi_32     *data, axi_size_type size);
-    axi_resp_type burst_write(axi_address_type address, axi_u32    *data, axi_size_type size);
-    axi_resp_type burst_write(axi_address_type address, axi_64     *data, axi_size_type size);
-    axi_resp_type burst_write(axi_address_type address, axi_u64    *data, axi_size_type size);
-    axi_resp_type burst_write(axi_address_type address, axi_128    *data, axi_size_type size);
-    axi_resp_type burst_write(axi_address_type address, axi_u128   *data, axi_size_type size);
-    axi_resp_type burst_write(axi_address_type address, axi_256    *data, axi_size_type size);
-    axi_resp_type burst_write(axi_address_type address, axi_u256   *data, axi_size_type size);
-    axi_resp_type burst_write(axi_address_type address, axi_512    *data, axi_size_type size);
-    axi_resp_type burst_write(axi_address_type address, axi_u512   *data, axi_size_type size);
-    axi_resp_type burst_write(axi_address_type address, axi_1024   *data, axi_size_type size);
-    axi_resp_type burst_write(axi_address_type address, axi_u1024  *data, axi_size_type size);
-    axi_resp_type burst_write(axi_address_type address, axi_float  *data, axi_size_type size);
-    axi_resp_type burst_write(axi_address_type address, axi_double *data, axi_size_type size);
+    axi_resp_type burst_write(axi_address_type address, axi_8         *data, axi_size_type size);
+    axi_resp_type burst_write(axi_address_type address, axi_u8        *data, axi_size_type size);
+    axi_resp_type burst_write(axi_address_type address, axi_16        *data, axi_size_type size);
+    axi_resp_type burst_write(axi_address_type address, axi_u16       *data, axi_size_type size);
+    axi_resp_type burst_write(axi_address_type address, axi_32        *data, axi_size_type size);
+    axi_resp_type burst_write(axi_address_type address, axi_u32       *data, axi_size_type size);
+    axi_resp_type burst_write(axi_address_type address, axi_64        *data, axi_size_type size);
+    axi_resp_type burst_write(axi_address_type address, axi_u64       *data, axi_size_type size);
+    axi_resp_type burst_write(axi_address_type address, axi_128       *data, axi_size_type size);
+    axi_resp_type burst_write(axi_address_type address, axi_u128      *data, axi_size_type size);
+    axi_resp_type burst_write(axi_address_type address, axi_256       *data, axi_size_type size);
+    axi_resp_type burst_write(axi_address_type address, axi_u256      *data, axi_size_type size);
+    axi_resp_type burst_write(axi_address_type address, axi_512       *data, axi_size_type size);
+    axi_resp_type burst_write(axi_address_type address, axi_u512      *data, axi_size_type size);
+    axi_resp_type burst_write(axi_address_type address, axi_1024      *data, axi_size_type size);
+    axi_resp_type burst_write(axi_address_type address, axi_u1024     *data, axi_size_type size);
+    // axi_resp_type burst_write(axi_address_type address, axi_float  *data, axi_size_type size);
+    // axi_resp_type burst_write(axi_address_type address, axi_double *data, axi_size_type size);
 };
 
 #endif

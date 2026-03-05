@@ -1,12 +1,7 @@
 
 #include "axi_master_if.h"
 
-axi_master_interface::axi_master_interface() 
-{
-#ifdef C_SIMULATION
-  for (int i=0; i<0x10000; i++) memory_store_index[i] = (unsigned char *) NULL;
-#endif
-};
+axi_master_interface::axi_master_interface() {};
 
 axi_master_interface::~axi_master_interface() {};
 
@@ -25,32 +20,17 @@ ac_int<SIZE_BITS, false>  axi_master_interface::encode_size(const int n)
 
 ac_int<BYTE_BITS, false>  axi_master_interface::encode_strb(const int n, ac_int<BUS_BITS, false> low_bits)
 {
-   if (n ==    8)    return ((ac_int<BYTE_BITS, false>) 0x01 << low_bits);
-#if (BYTE_BITS > 1)
-   if (n ==   16)    return ((ac_int<BYTE_BITS, false>) 0x03 << low_bits);
-#if (BYTE_BITS > 2)
-   if (n ==   32)    return ((ac_int<BYTE_BITS, false>) 0x0F << low_bits);
-#if (BYTE_BITS > 4)
-   if (n ==   64)    return ((ac_int<BYTE_BITS, false>) 0xFF << low_bits);
-#if (BYTE_BITS > 8)
-   if (n ==  128)    return ((ac_int<BYTE_BITS, false>) 0xFFFF << low_bits);
-#if (BYTE_BITS > 16)
-   if (n ==  256)    return ((ac_int<BYTE_BITS, false>) 0xFFFFFFFF << low_bits);
-#if (BYTE_BITS > 32)
-   if (n ==  512)    return ((ac_int<BYTE_BITS, false>) 0xFFFFFFFFFFFFFFFF << low_bits);
-#if (BYTE_BITS > 64)
-   if (n == 1024)    return ((ac_int<BYTE_BITS, false>) 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF << low_bits);
-#endif
-#endif
-#endif
-#endif
-#endif
-#endif
-#endif
-   return 0;
+   ac_int<BYTE_BITS, false> r = 0;
+    
+  #pragma hls_unroll
+    for (int i=0; i<BYTE_BITS; i++) {
+        if (i<(n>>3)) {
+            r.set_slc(i, (ac_int<1, false>) 1);
+        }
+    }
+    
+   return r << low_bits;
 }
-
-#ifdef C_SIMULATION
 
 void axi_master_interface::tb_memory_write(long long address, int count, unsigned char *data)
 {
@@ -67,13 +47,7 @@ void axi_master_interface::memory_store_byte_write(long long address, unsigned c
    unsigned char   *memory_page;
 
    if ((memory_store_index[(address>>16) & 0xFFFF]) == NULL) {
-     unsigned char *p = (unsigned char *) malloc(0x10000 * sizeof(unsigned char));
-     if (p == NULL) {
-       fprintf(stderr, "Out of memory, malloc failed \n");
-       perror("axi_bus");
-       exit(47);
-     } 
-     memory_store_index[(address>>16) & 0xFFFF] = p; // (unsigned char *) malloc(0x10000 * sizeof(unsigned char));
+     memory_store_index[(address>>16) & 0xFFFF] = (unsigned char *) malloc(0x10000 * sizeof(unsigned char *));
    }
    memory_page = memory_store_index[(address>>16) & 0xFFFF];
 
@@ -91,66 +65,75 @@ unsigned char axi_master_interface::memory_store_byte_read(long long address)
    return memory_page[address & 0xFFFF];
 }
 
-axi_data_type axi_master_interface::csim_memory_read(axi_address_type address, int size)
+char *string_axi_data(axi_u1024 *data, char *buffer)
+{
+    int i, j;
+    
+    for (i=0; i<255; i++) {
+        if (data->slc<4>(1024-((1+i)*4)) != 0) break;
+    }
+
+    for (j=0; j<256-i; j++) {
+        buffer[j] = "0123456789ABCDEF"[data->slc<4>(1024-((1+i+j)*4))];
+    }
+    buffer[j] = 0;
+
+    return buffer;
+}
+
+void axi_master_interface::csim_memory_read(axi_address_type address, long size, axi_data_type *data)
 {
    unsigned char byte_value;
-
-   assert (size <= STRIDE);
-
-   axi_data_type ret = (axi_data_type) 0;
-
-   bool aligned = false;
+   const bool chatty = false;
+   *data = (axi_data_type) 0;
 
    if (aligned) {
      for (int byte=0; byte<size; byte++) {
        byte_value = memory_store_byte_read((long) address + byte);
-       for (int bit=0; bit<8; bit++) ret[byte * 8 + bit] = (byte_value >> bit) & 1;
+       for (int bit=0; bit<8; bit++) data[byte * 8 + bit] = (byte_value >> bit) & 1;
      } 
    } else {
-     const unsigned long long offset = ((unsigned long long) address) & ADDR_LOW_BITS_MASK;
+     int offset = (int) (address & ADDR_LOW_BITS_MASK);
      for (int byte=offset; byte<offset + size; byte++) {
-       byte_value = memory_store_byte_read(((unsigned long long) address) - offset + byte);
-       for (int bit=0; bit<8; bit++) ret[byte * 8 + bit] = (byte_value >> bit) & 1;
+       byte_value = memory_store_byte_read(address - offset + byte);
+         data->set_slc((axi_u16) byte*8, (axi_u8) byte_value);
      }
    }
 
-   return(ret);
+    if (chatty) {
+        char buffer[(BUS_SIZE/4)+1];
+        axi_u1024 wide_data = *data;
+        printf("csim_memory_read: address: %08llx size: %ld data: %s (bits) \n", address.to_int64(), size*WORD_SIZE, string_axi_data(&wide_data, buffer));
+    }
+
+   return;
 }
        
-
-void axi_master_interface::csim_memory_write(axi_address_type address, int size, axi_data_type data)
+void axi_master_interface::csim_memory_write(axi_address_type address, long size, axi_data_type *data, ac_int<BYTE_BITS, false> strb)
 {
-   assert (size <= STRIDE);
-
-   bool aligned = false;
-
-   if (aligned) {
-     for (int byte=0; byte<size; byte++) {
-       memory_store_byte_write((long) address + byte, data.slc<8>(byte*8));
-     }
-   } else {
-     const unsigned long long offset = ((unsigned long long) address) & ADDR_LOW_BITS_MASK;
-     for (int byte=offset; byte<offset + size; byte++) {
-       memory_store_byte_write(((unsigned long long) address) - offset + byte, data.slc<8>(byte*8));
-     }
-   }
+    const bool chatty = false;
+    
+    if (chatty) {
+        printf("csim_memory_write: address: %08llx size: %ld (bits) ", address.to_int64(), size*WORD_SIZE);
+        for (int i=size-1; i>=0; i--) {
+            if (strb[i]) printf("%02x", data->slc<8>(i*8).to_int());
+            else printf("--");
+        }
+        printf("\n");
+    }
+    for (int byte=0; byte<size; byte++) {
+        if (strb[byte]) memory_store_byte_write(address + byte, data->slc<8>(byte*8));
+    }
 }
 
-#else
-
-void axi_master_interface::tb_memory_write(long long address, int count, unsigned char *data) { }
-
-void axi_master_interface::tb_memory_read(long long address, int count, unsigned char *data) { }
-
-#endif
 
 void axi_master_interface::send_ar(ar_payload &ar)
 {
 #ifdef C_SIMULATION
-   csim_r_address = ar.address;       // byte address
-   csim_r_size    = (1 << ar.size);   // bytes per beat
-   csim_r_count   = ar.len + 1;       // number of beats
-   csim_r_id      = ar.id;            
+   csim_r_address = ar.address;
+   csim_r_size    = (1<<ar.size);
+   csim_r_count   = ar.len + 1;
+   csim_r_id      = ar.id;
 #else
    channels.ar_channel.write(ar);
 #endif
@@ -159,7 +142,8 @@ void axi_master_interface::send_ar(ar_payload &ar)
 void axi_master_interface::get_r(r_payload &r)
 {
 #ifdef C_SIMULATION
-   r.data = csim_memory_read(csim_r_address, csim_r_size);
+    axi_address_type a = csim_r_address;
+   csim_memory_read(a, csim_r_size, &r.data);
    r.last = csim_r_count == 1;
    r.resp = 0;
    r.id   = csim_r_id;
@@ -185,12 +169,13 @@ void axi_master_interface::send_aw(aw_payload &aw)
 void axi_master_interface::send_w(w_payload &w)
 {
 #ifdef C_SIMULATION
-   csim_memory_write(csim_w_address, csim_w_size, w.data);
-   w.last = csim_w_count == 1;
-   csim_w_count--;
-   csim_w_address += csim_w_size;
+    axi_address_type a = csim_w_address;
+    csim_memory_write(a, csim_w_size, &w.data, w.strb);
+    w.last = csim_w_count == 1;
+    csim_w_count--;
+    csim_w_address += csim_w_size;
 #else
-   channels.w_channel.write(w);
+    channels.w_channel.write(w);
 #endif
 }
    
@@ -203,147 +188,7 @@ void axi_master_interface::get_b(b_payload &b)
 #endif
 } 
 
-
-template <typename datatype, int size> 
-axi_resp_type  axi_master_interface::axi_read_real(axi_address_type address, datatype &data_in)
-{
-   ar_payload ar;
-   r_payload  r;
-
-   ac_int<BUS_BITS, false> low_bits = address.slc<BUS_BITS>(0); 
-   static ac_int<WRITE_ID_BITS, false> id = 0;
-
-   ar.address  = address;
-   ar.id       = id++;              // expected to overflow
-   ar.len      = 0;                 // single read
-   ar.size     = encode_size(size); // size
-   ar.burst    = 1;                 // incrementing
-   ar.lock     = 0;                 // unlocked
-   ar.cache    = 0;                 // uncached
-   ar.prot     = 0;                 // no protection
-   ar.qos      = 0;                 // normal qos
-
-   // channels.ar_channel.write(ar);
-   send_ar(ar);
-
-   ac::wait();
-
-   // r = channels.r_channel.read();
-   get_r(r);
-
-   data_in.d = ((ac_int<size, false>) (r.data >> (((ac_int<BUS_BITS + 3, false>) low_bits) << 3)));
-
-   return r.resp;
-}
-
-
-template <typename datatype, int size> 
-axi_resp_type  axi_master_interface::axi_read_base(axi_address_type address, datatype &data_in)
-{
-   ar_payload ar;
-   r_payload  r;
-
-   ac_int<BUS_BITS, false> low_bits = address.slc<BUS_BITS>(0); 
-   static ac_int<WRITE_ID_BITS, false> id = 0;
-
-   ar.address  = address;
-   ar.id       = id++;              // expected to overflow
-   ar.len      = 0;                 // single read
-   ar.size     = encode_size(size); // size from template
-   ar.burst    = 1;                 // incrementing
-   ar.lock     = 0;                 // unlocked
-   ar.cache    = 0;                 // uncached
-   ar.prot     = 0;                 // no protection
-   ar.qos      = 0;                 // normal qos
-
-   // channels.ar_channel.write(ar);
-   send_ar(ar);
-
-   ac::wait();
-
-   // r = channels.r_channel.read();
-   get_r(r);
-
-   data_in = r.data >> (((ac_int<BUS_BITS + 3, false>) low_bits) << 3); // (8 * low_bits); this eliminates a multiplier and replaces it with a shift
-   return r.resp;
-}
-
-template <typename datatype, int size> 
-axi_resp_type  axi_master_interface::axi_write_real(axi_address_type address, datatype data_out)
-{
-   aw_payload aw;
-   w_payload  w;
-   b_payload  b;
-
-   ac_int<BUS_BITS, false> low_bits = address.slc<BUS_BITS>(0); 
-   static ac_int<READ_ID_BITS, false> id = 0;
-
-   aw.address  = address;
-   aw.id       = id++;              // expected to overflow
-   aw.len      = 0;                 // single read
-   aw.size     = encode_size(size); // size
-   aw.burst    = 1;                 // incrementing
-   aw.lock     = 0;                 // unlocked
-   aw.cache    = 0;                 // uncached
-   aw.prot     = 0;                 // no protection
-   aw.qos      = 0;                 // normal qos
-
-   // channels.aw_channel.write(aw);
-   send_aw(aw);
-
-   w.data      = ((ac_int<BUS_SIZE, false>) data_out.data()) << (((ac_int<BUS_BITS + 3, false>) low_bits) << 3);  // data
-   w.last      = 1;                 // single write operation
-   w.strb      = encode_strb(size, low_bits); // strobe bits (todo: check alignment)
-
-   // channels.w_channel.write(w);
-   send_w(w); 
-
-   ac::wait();
-
-   // b = channels.b_channel.read();
-   get_b(b);
-
-   return b.resp;
-}
-
-template <typename datatype, int size> 
-axi_resp_type  axi_master_interface::axi_write_base(axi_address_type address, datatype data_out)
-{
-   aw_payload aw;
-   w_payload  w;
-   b_payload  b;
-
-   ac_int<BUS_BITS, false> low_bits = address.slc<BUS_BITS>(0); 
-   static ac_int<READ_ID_BITS, false> id = 0;
-
-   aw.address  = address;
-   aw.id       = 0x0;               // was: id++; // expected to overflow
-   aw.len      = 0x0;                 // was: 0; // single read
-   aw.size     = encode_size(size); // size from template
-   aw.burst    = 1;                 // incrementing
-   aw.lock     = 1;                 // unlocked
-   aw.cache    = 0;                 // uncached
-   aw.prot     = 0;                 // no protection
-   aw.qos      = 0;                 // normal qos
-
-   w.data      = ((ac_int<BUS_SIZE, false>) data_out) << (((ac_int<BUS_BITS + 3, false>) low_bits) << 3);  // data
-   w.last      = 1;                 // single write operation
-   w.strb      = encode_strb(size, low_bits); // strobe bits (todo: check alignment)
-
-   // channels.aw_channel.write(aw);
-   send_aw(aw);
-   // channels.w_channel.write(w);
-   send_w(w); 
-
-   ac::wait();
-
-   // b = channels.b_channel.read();
-   get_b(b);
-
-   return b.resp;
-}
-
-int min(int a, int b, int c)
+axi_address_type min(axi_address_type a, axi_address_type b, axi_address_type c)
 {
    if ((a<=b) && (a<=c)) return a;
    if ((b<=a) && (b<=c)) return b;
@@ -361,938 +206,599 @@ ac_int<BUS_BITS+1, false> axi_master_interface::ones(ac_int<BYTE_BITS, false> by
    }
 
    return sum;
-}     
-
-template <typename datatype, int size>
-axi_resp_type axi_master_interface::axi_burst_write_base(
-       axi_address_type   address,
-       datatype          *data_out,
-       axi_size_type      count)
-{
-   // simple and fast
-   // must be fully aligned
-   // datatype must match buswidth
-   // caller responsible for 4k boundary avoidance
-
-   aw_payload  aw;
-   w_payload   w;
-   b_payload   b;
-
-   ac_int<16, false> beat;
-   axi_resp_type    resp = 0;
-
-   // set write address payload
-   
-   if (size == 0) return resp;
-
-   aw.address  = address;
-   aw.id       = 0; // any number 
-   aw.len      = count-1; 
-   aw.size     = BUS_BITS; // full buswidth
-   aw.burst    = 1; // incrementing
-   aw.lock     = 0; // unlocked
-   aw.cache    = 0; // uncached
-   aw.prot     = 0; // no protection
-   aw.qos      = 0; // normal qos
-  
-   send_aw(aw);
- 
-   beat = 0;
-   w.strb = -1; // 0xFFFFFFFF;
-
-  #pragma hls_pipeline_init_interval 1
-   data_beat_loop: for (int beat=0; ; beat++) {
-     w.last = (beat == aw.len);
-     w.data = data_out[beat];
-     send_w(w);
-     if (w.last) break;
-   }
-   // ac::wait();
-
-   get_b(b);
-
-   return b.resp;
 }
 
-/*
-template <typename datatype, int size> 
-axi_resp_type axi_master_interface::axi_burst_write_base_complete(
-       axi_address_type   address,
-       datatype          *data_out,
-       axi_size_type      count)
+ac_int<BYTE_BITS, false> axi_master_interface::set_strb(
+    const axi_size_type start_offset,
+    const axi_size_type end_offset,
+    bool first,
+    bool last)
 {
-   aw_payload  aw;
-   w_payload   w;
-   b_payload   b;
-
-   const axi_address_type address_mask  = ADDR_HIGH_BITS_MASK;
-   const ac_int<LEN_BITS, false> max_burst_len = (((ac_int<LEN_BITS, false>) 0) - 1);  // defines maximum possible bust size
-                                                          // if count is greater transfer is broken up into multiple bursts
-                                              
-   const axi_address_type first_line      = (address & address_mask);                                    // byte address of first line to write
-   const axi_address_type last_line       = ((address + (count * (size/WORD_SIZE)) - 1) & address_mask);                      // byte address of last line to write
-   const bool start_aligned  = (address == first_line);
-   const bool end_aligned    = (((address + count) & ADDR_LOW_BITS_MASK) == 0);
-   const int lines           = (((last_line >> BUS_BITS) - (first_line >> BUS_BITS)) + 1);  // number of lines in the transfer             
-   const int start_delta     = ((address - first_line) / (size/WORD_SIZE));                                   
-   const int end_delta       = ((1 << BUS_BITS) - 1) - ((address + (count * (size/WORD_SIZE)) - 1) & ADDR_LOW_BITS_MASK);
-
-   axi_size_type burst_count = 0;
-   axi_size_type sent        = 0;
-   axi_size_type lines_sent  = 0;
-   axi_size_type delta       = start_delta;
-   axi_address_type max_burst;
-   axi_size_type burst_size;
-   axi_address_type burst_end;
-   axi_address_type base_word;
-   axi_resp_type    resp = 0;
-
-   bool first = true;
-   bool last;
-
-   axi_address_type burst_start;
-   axi_address_type four_k_boundary;
-
-   w.data = 0;
-
-   // set write address payload
-   
-   if (size == 0) return resp;
-
-   burst_start = first_line;   
-   base_word   = first_line;
-
-   do {
-
-      four_k_boundary = (((address + sent) & (~(PAGE_MASK))) + (PAGE_SIZE) - (STRIDE));   // byte address of last line in 4K page
-      max_burst       = (address + sent) + (((1 << LEN_BITS) - 1) << (BUS_BITS));         // byte address of last line in max burst size
-      burst_end       = min(last_line, four_k_boundary, max_burst);                       // smallest of remaining words, 4K boundary, or max_burst_len
-
-      burst_size = (burst_end - burst_start) >> BUS_BITS;
-
-      aw.address  = address + sent;
-      aw.id       = 0; // any number 
-      aw.len      = burst_size; 
-      aw.size     = BUS_BITS; // full buswidth
-      aw.burst    = 1; // incrementing
-      aw.lock     = 0; // unlocked
-      aw.cache    = 0; // uncached
-      aw.prot     = 0; // no protection
-      aw.qos      = 0; // normal qos
-  
-      send_aw(aw);
- 
-     #pragma hls_pipeline_init_interval 1
-      data_beat_loop: for (int beat=0; beat<burst_size+1; beat++) {
-         last = (sent + STRIDE/(size/WORD_SIZE)) >= count;
-
-         w.data = 0;
-         w.strb = (first && last) ? (BYTE_MASK << (start_delta + end_delta)) >> end_delta :
-                  (first)         ?  BYTE_MASK << start_delta :
-                  (last)          ?  BYTE_MASK >> end_delta   :
-                                     BYTE_MASK;
-         w.strb = 0xFF;
-         w.last = (beat == burst_size);
-
-         delta = first ? start_delta : 0;
-
-        #pragma hls_unroll 
-         data_load: for (ac_int<16, false> i=0; i<(BUS_SIZE/size); i++) {
-             
-             // todo: promote constant sub-expressions
-             
-             if (((base_word +  i * (size/WORD_SIZE)) >= address) && 
-                 ((base_word +  i * (size/WORD_SIZE)) < (address + (count * (size/WORD_SIZE))))) {
-                     w.data.set_slc(size * i, data_out[i + sent - delta]);
-             }
-
-         }
-         send_w(w);
-      
-         lines_sent++;
-         sent += ones(w.strb)/(size/WORD_SIZE); // todo: get rid of these division operations!!  Add 7 clocks to each loop iteration
-         //delta += ones(w.strb)/(size/WORD_SIZE);
-         base_word += STRIDE;
-         first = false;
-      }
-
-      // ac::wait();
-
-      get_b(b);
-
-      if (b.resp != 0) return b.resp;
-
-      burst_start += burst_size + 1;
-
-   } while (lines_sent < lines);  
-   
-   return b.resp;
-}
-*/
-
-template <typename datatype, int size> 
-axi_resp_type axi_master_interface::axi_burst_write_real_base(
-       axi_address_type   address,
-       datatype          *data_out,
-       axi_size_type      count)
-{
-   aw_payload  aw;
-   w_payload   w;
-   b_payload   b;
-
-   const axi_address_type address_mask  = ADDR_HIGH_BITS_MASK;
-   const ac_int<LEN_BITS, false> max_burst_len = (((ac_int<LEN_BITS, false>) 0) - 1);  // defines maximum possible bust size
-                                                          // if count is greater transfer is broken up into multiple bursts
-                                              
-   const axi_address_type first_line  = (address & address_mask);                                    // byte address of first line to write
-   const axi_address_type last_line   = ((address + (count * (size/WORD_SIZE)) - 1) & address_mask);                      // byte address of last line to write
-   const bool start_aligned           = (address == first_line);
-   const bool end_aligned             = (((address + count) & ADDR_LOW_BITS_MASK) == 0);
-   const axi_size_type lines          = (axi_size_type) (((last_line >> BUS_BITS) - (first_line >> BUS_BITS)) + 1);  // number of lines in the transfer             
-   const axi_size_type start_delta    = (axi_size_type) (address - first_line);                                   
-   const axi_size_type end_delta      = (axi_size_type) (((1 << BUS_BITS) - 1) - ((address + (count * (size/WORD_SIZE)) - 1) & ADDR_LOW_BITS_MASK));
-
-   axi_size_type burst_count = 0;
-   axi_size_type sent        = 0;
-   axi_size_type lines_sent  = 0;
-   axi_size_type delta       = 0;
-   axi_address_type max_burst;
-   axi_size_type burst_size;
-
-   axi_address_type burst_end;
-   axi_address_type base_word;
-   axi_resp_type    resp = 0;
-
-   bool first = true;
-   bool last;
-
-   axi_address_type burst_start;
-   axi_address_type four_k_boundary;
-
-   w.data = 0;
-
-   // set write address payload
-   
-   if (size == 0) return resp;
-
-   burst_start = first_line;   
-   base_word   = first_line;
-
-   do {
-
-      four_k_boundary = (((address + sent) & (~(PAGE_MASK))) + (PAGE_SIZE) - (STRIDE));   // byte address of last line in 4K page
-      max_burst       = (address + sent) + (((1 << LEN_BITS) - 1) << (BUS_BITS));         // byte address of last line in max burst size
-      burst_end       = min(last_line, four_k_boundary, max_burst);                       // smallest of remaining words, 4K boundary, or max_burst_len
-
-      burst_size = (burst_end - burst_start) >> BUS_BITS;
-
-      aw.address  = address + sent;
-      aw.id       = 0; // any number 
-      aw.len      = burst_size; 
-      aw.size     = BUS_BITS; // full buswidth
-      aw.burst    = 1; // incrementing
-      aw.lock     = 0; // unlocked
-      aw.cache    = 0; // uncached
-      aw.prot     = 0; // no protection
-      aw.qos      = 0; // normal qos
-  
-      // channels.aw_channel.write(aw);
-      send_aw(aw);
- 
-     #pragma hls_pipeline_init_interval 1
-      for (int i=0; i<burst_size+1; i++) {
-         last = (sent + STRIDE/(size/WORD_SIZE)) >= count;
-
-         w.data = 0;
-         w.strb = (first && last) ? (BYTE_MASK << (start_delta + end_delta)) >> end_delta :
-                  (first)         ?  BYTE_MASK << start_delta :
-                  (last)          ?  BYTE_MASK >> end_delta   :
-                                     BYTE_MASK;
-         w.last = last;
-   
-        #pragma hls_unroll 
-         data_load: for (ac_int<16, false> i=0; i<(BUS_SIZE/size); i++) {
-             
-             // todo: promote constant sub-expressions
-             
-             if (((base_word +  i * (size/WORD_SIZE)) >= address) && 
-                 ((base_word +  i * (size/WORD_SIZE)) < (address + (count * (size/WORD_SIZE))))) 
-                     w.data.set_slc(size * i, (ac_int<size, false>) data_out[delta + i].data());
-
-         }
-         // channels.w_channel.write(w);
-         send_w(w);
-      
-         lines_sent++;
-         sent += ones(w.strb)/(size/WORD_SIZE); // todo: get rid of these division operations!!
-         delta += ones(w.strb)/(size/WORD_SIZE);
-         base_word += STRIDE;
-         first = false;
-      }
-
-      ac::wait();
-
-      // b = channels.b_channel.read();
-      get_b(b);
-
-      if (b.resp != 0) return b.resp;
-
-      burst_start += burst_size + 1;
-
-   } while (lines_sent < lines);  
-   
-   return b.resp;
+    if (first & last) {
+        ac_int<BYTE_BITS, false> r;
+        axi_size_type e = end_offset ? end_offset : (axi_size_type) BUS_BYTES;
+        
+        r = BYTE_MASK;
+        r = r << (start_offset + (BUS_BYTES - e));
+        r = r >> (BUS_BYTES - e);
+        return r;
+    }
+    
+    if (first) {
+        return (BYTE_MASK << start_offset);
+    }
+    
+    if (last) {
+        axi_size_type e = end_offset ? end_offset : (axi_size_type) BUS_BYTES;
+        return (BYTE_MASK >> (BUS_BYTES - e));
+    }
+    return(BYTE_MASK);
 }
 
 
-template <typename datatype, int size>
+template <typename datatype, int bit_shift>
 axi_resp_type axi_master_interface::axi_burst_read_base(
        axi_address_type   address,
        datatype          *data_in,
        axi_size_type      count)
 {
-   ar_payload ar;
-   r_payload r;
+    ar_payload ar;
+    r_payload r;
 
-   axi_resp_type    resp = 0;
-   ac_int<16, false> beat;
+    const int size_bytes = (1 << bit_shift);
+    const int size_bits  = (size_bytes << 3);
+    const axi_size_type byte_count = count * size_bytes;
 
-   if (count == 0) return resp;
+    const axi_address_type   address_mask  = ADDR_HIGH_BITS_MASK;
+    const axi_address_type   first_line    = (address & address_mask);                       // byte address of first line to write
+    const axi_address_type   last_line     = ((address + byte_count - 1) & address_mask);    // byte address of last line to write
+    
+    const bool start_aligned  = (address == first_line);
+    const axi_size_type lines = ((last_line >> BUS_BITS) - (first_line >> BUS_BITS)) + 1;    // number of lines in the transfer
+    const axi_size_type start_delta = address - first_line;
 
-   ar.address  = address;
-   ar.id       = 4; // any number 
-   ar.len      = count - 1;
-   ar.size     = BUS_BITS; // full bus width
-   ar.burst    = 1; // incrementing
-   ar.lock     = 0; // unlocked
-   ar.cache    = 0; // uncached
-   ar.prot     = 0; // no protection
-   ar.qos      = 0; // normal qos
+    // const bool chatty         = false;
+    
+    // const axi_size_type word_size       = size_bits >> 3;           // word size in bytes
+    const axi_size_type words_per_line  = BUS_SIZE / size_bits;     // STRIDE is bytes per line
+    const axi_size_type bytes_per_word  = size_bits / WORD_SIZE;
+    const axi_size_type offset          = (axi_size_type) (address & ADDR_LOW_BITS_MASK);
+    const axi_size_type bit_offset      = offset << 3;
 
-   send_ar(ar);
-   ac::wait();
 
-  #pragma hls_pipeline_init_interval 1
-   for (int beat=0; beat<count; beat++) {
-     get_r(r);
-     data_in[beat] = r.data;
-     if (r.resp) return r.resp;
-     // if (beat == ar.len) break;
-   }
+    axi_size_type     bytes_recv        = 0;
+    axi_size_type     lines_received    = 0;
+    axi_resp_type     resp              = 0;
+    axi_size_type     burst_lines_recv;
+    axi_address_type  max_burst;
+    axi_size_type     burst_size;
+    axi_size_type     base;
+    axi_data_type     old_data;
+    axi_address_type  burst_end;
+    axi_address_type  base_word;
+    axi_address_type  burst_start;
+    axi_address_type  four_k_boundary;
 
-   ac::wait();
+    bool first = true;
+
+    r.data = 0;
+   
+    if (size_bits == 0) return resp;
+
+    burst_start = first_line;
+    base_word   = first_line;
+
+    base = 0;
+
+    do {
+        four_k_boundary = (((address + bytes_recv) & (~(PAGE_MASK))) + (PAGE_SIZE) - (STRIDE));   // byte address of last line in 4K page
+        max_burst       = (address + bytes_recv) + (((1 << LEN_BITS) - 1) << (BUS_BITS));         // byte address of last line in max burst size
+        burst_end       = min(last_line, four_k_boundary, max_burst);                       // smallest of remaining words, 4K boundary, or max_burst_len
+
+        burst_size = (burst_end - burst_start) >> BUS_BITS;
+       
+        bool last_burst = (burst_end == last_line);
+      
+        // set read address payload
+
+        ar.address  = (address + bytes_recv) & ADDR_HIGH_BITS_MASK;
+        ar.id       = 4; // any number
+        ar.len      = burst_size;
+        ar.size     = BUS_BITS; // full bus width
+        ar.burst    = 1; // incrementing
+        ar.lock     = 0; // unlocked
+        ar.cache    = 0; // uncached
+        ar.prot     = 0; // no protection
+        ar.qos      = 0; // normal qos
+
+        send_ar(ar);
+
+        burst_lines_recv = 0;
+
+        axi_size_type flush_cycle = (last_burst && !start_aligned) ? 1 : 0;
+
+       #pragma hls_pipeline_init_interval 1
+        for (int i=0; i<burst_size+1+flush_cycle; i++) {
+            bool last_beat = (bytes_recv + BUS_BYTES - start_delta) >= byte_count;
+
+            if (burst_lines_recv < burst_size+1) {
+                get_r(r);
+                burst_lines_recv++;
+                if (first) old_data = r.data;
+            }
+           
+            bool skip_load = (first && !start_aligned && !last_beat);
+           
+            if (!skip_load) {
+               #pragma hls_unroll
+                data_load: for (int b=0; b<BUS_BYTES; b++) {  // for each byte lane
+                    int bit = b<<3;
+                    if ((base + b) < byte_count) { // if not past then end of the array
+                        axi_size_type index = (base + b) >> bit_shift;
+                        axi_size_type slice = (b & (ADDR_LOW_BITS_MASK >> (BUS_BITS - bit_shift))) << 3;
+                        if (start_aligned) {
+                            data_in[index].set_slc(slice, r.data.slc<8>(bit));//first parameter wrong
+                        } else {
+                            if (b + offset>=STRIDE) {
+                                data_in[index].set_slc(slice, r.data.slc<8>(bit-BUS_SIZE+bit_offset));
+                            } else {
+                                data_in[index].set_slc(slice, old_data.slc<8>(bit+bit_offset));
+                            }
+                        }
+                    }
+                }
+               
+               base += BUS_BYTES;
+            }
+            if (first) bytes_recv += BUS_BYTES - offset;
+            else bytes_recv += BUS_BYTES;
+                              
+            old_data = r.data;
+               
+            first = false;
+
+            if (base >= byte_count) break;
+
+        }
+       
+        lines_received += burst_lines_recv;
+        burst_start += (burst_size + 1) << BUS_BITS;
+
+    } while (lines_received < lines);
+
    return r.resp;
 }
 
-/*
-template <typename datatype, int size> 
-axi_resp_type axi_master_interface::axi_burst_read_base_complete(
+template <typename datatype, int bit_shift>
+axi_resp_type axi_master_interface::axi_burst_write_base(
        axi_address_type   address,
-       datatype          *data_in,
+       datatype          *data_out,
        axi_size_type      count)
 {
-   ar_payload ar;
-   r_payload r;
+    aw_payload aw;
+    w_payload w;
+    b_payload b;
 
-   const axi_address_type address_mask  = ADDR_HIGH_BITS_MASK;
-   const ac_int<LEN_BITS, false> max_burst_len = (((ac_int<LEN_BITS, false>) 0) - 1);  // defines maximum possible bust size
-                                                          // if count is greater transfer is broken up into multiple bursts
-                                              
-   const axi_address_type first_line      = (address & address_mask);                                    // byte address of first line to write
-   const axi_address_type last_line       = ((address + (count * (size/WORD_SIZE)) - 1) & address_mask);                      // byte address of last line to write
-   const bool start_aligned  = (address == first_line);
-   const bool end_aligned    = (((address + count) & ADDR_LOW_BITS_MASK) == 0);
-   const int lines           = (((last_line >> BUS_BITS) - (first_line >> BUS_BITS)) + 1);  // number of lines in the transfer             
-   const int start_delta     = ((address - first_line) / (size/WORD_SIZE));                                   
-   const int end_delta       = STRIDE - (((1 << BUS_BITS) - 1) - ((address + (count * (size/WORD_SIZE)) - 1) & ADDR_LOW_BITS_MASK));
+    const int size_bytes = (1 << bit_shift);
+    const int size_bits  = (size_bytes << 3);
+    const axi_size_type byte_count = count * size_bytes;
 
-   const int all_words       = count;
-   const int first_words     = (STRIDE - start_delta) / (size/WORD_SIZE);
-   const int last_words      = (end_delta / (size/WORD_SIZE)==0) ? (STRIDE) / (size/WORD_SIZE) : end_delta / (size/WORD_SIZE);
-   const int full_bus        = (STRIDE) / (size/WORD_SIZE);
+    const axi_address_type   address_mask  = ADDR_HIGH_BITS_MASK;
+    const axi_address_type   first_line    = (address & address_mask);                       // byte address of first line to write
+    const axi_address_type   last_line     = ((address + byte_count - 1) & address_mask);    // byte address of last line to write
+    
+    const axi_address_type  last_byte  = address + byte_count - 1;
+    
+    const axi_size_type lines          = ((last_line >> BUS_BITS) - (first_line >> BUS_BITS)) + 1;    // number of lines in the transfer
+    const axi_size_type start_delta    = address - first_line;
+    const axi_size_type end_delta      = (address + byte_count - last_line);
+    // const bool chatty                  = false;
+    
+    const axi_size_type words_per_line  = BUS_SIZE / size_bits;     // STRIDE is bytes per line
+    const axi_size_type bytes_per_word  = size_bits / WORD_SIZE;
+    const axi_size_type offset          = (axi_size_type) (address & ADDR_LOW_BITS_MASK);
 
-   axi_size_type words_moved;
-   axi_size_type burst_count = 0;
-   axi_size_type received    = 0;
-   axi_size_type lines_received  = 0;
-   axi_size_type delta       = 0;
-   axi_address_type max_burst;
-   axi_size_type burst_size;
+    axi_size_type     bytes_sent        = 0;
+    axi_size_type     lines_sent        = 0;
+    axi_resp_type     resp              = 0;
+    axi_size_type     burst_lines_sent;
+    axi_address_type  max_burst;
+    axi_size_type     burst_size;
+    axi_size_type     bytes_loaded      = 0;
+    axi_address_type  burst_end;
+    axi_address_type  base_word;
+    axi_address_type  burst_start;
+    axi_address_type  four_k_boundary;
 
-   axi_address_type burst_end;
-   axi_address_type base_word;
-   axi_resp_type    resp = 0;
-
-   bool first = true;
-   bool last;
-
-   axi_address_type burst_start;
-   axi_address_type four_k_boundary;
-
-   r.data = 0;
-
-   // set write address payload
+    bool first = true;
    
-   if (count == 0) return resp;
+    if (size_bits == 0) return
+        resp;
 
-   burst_start = first_line;   
-   base_word   = first_line;
+    burst_start = first_line;
+    base_word   = first_line;
 
-   do {
+    ac_int<BUS_SIZE * 2, false> buffer;
+    
+    buffer = 0;
+        
+    for (int i=0; i<(1 << (BUS_BITS-bit_shift)); i++) {
+        if ((bytes_loaded + i * size_bytes) < byte_count) {
+            buffer.set_slc((i * size_bits) + (offset << 3), data_out[(bytes_sent>>bit_shift)+i]);
+        }
+    }
+    
+    bytes_loaded += BUS_BYTES;
+    
+    do {
+        
+        four_k_boundary = (((address + bytes_sent) & (~(PAGE_MASK))) + (PAGE_SIZE) - (STRIDE));   // byte address of last line in 4K page
+        max_burst       = (address + bytes_sent) + (((1 << LEN_BITS) - 1) << (BUS_BITS));         // byte address of last line in max burst size
+        burst_end       = min(last_line, four_k_boundary, max_burst);                       // smallest of remaining words, 4K boundary, or max_burst_len
 
-      four_k_boundary = (((address + received) & (~(PAGE_MASK))) + (PAGE_SIZE) - (STRIDE));   // byte address of last line in 4K page
-      max_burst       = (address + received) + (((1 << LEN_BITS) - 1) << (BUS_BITS));         // byte address of last line in max burst size
-      burst_end       = min(last_line, four_k_boundary, max_burst);                       // smallest of remaining words, 4K boundary, or max_burst_len
+        burst_size = (burst_end - burst_start) >> BUS_BITS;
+        
+        assert (burst_size >= 0);
+        
+        axi_size_type beat_bytes = (last_byte + 1) - (address + bytes_sent);
+        if (beat_bytes > max_burst + BUS_BYTES) beat_bytes = max_burst + BUS_BYTES;
+        if (beat_bytes + address + bytes_sent > four_k_boundary + BUS_BYTES) beat_bytes = four_k_boundary + BUS_BYTES - (address + bytes_sent);
+             
+        // set read address payload
 
-      burst_size = (burst_end - burst_start) >> BUS_BITS;
+        aw.address  = (address + bytes_sent) & ADDR_HIGH_BITS_MASK;
+        aw.id       = 4; // any number
+        aw.len      = burst_size;
+        aw.size     = BUS_BITS; // full bus width
+        aw.burst    = 1; // incrementing
+        aw.lock     = 0; // unlocked
+        aw.cache    = 0; // uncached
+        aw.prot     = 0; // no protection
+        aw.qos      = 0; // normal qos
 
-      // set read address payload
+        send_aw(aw);
 
-      ar.address  = address + received;
-      ar.id       = 4; // any number 
-      ar.len      = burst_size;
-      ar.size     = BUS_BITS; // full bus width
-      ar.burst    = 1; // incrementing
-      ar.lock     = 0; // unlocked
-      ar.cache    = 0; // uncached
-      ar.prot     = 0; // no protection
-      ar.qos      = 0; // normal qos
+        burst_lines_sent = 0;
+        
+        axi_size_type burst_start_delta = (address + bytes_sent) & ADDR_LOW_BITS_MASK;
+        axi_size_type burst_end_delta   = (address + bytes_sent + beat_bytes) & ADDR_LOW_BITS_MASK;
 
-      // channels.ar_channel.write(ar);
-      send_ar(ar);
-printf("burst_size: %d \n", burst_size);
-     #pragma hls_pipeline_init_interval 1
-      for (int beat=0; beat<burst_size+1; beat++) {
+       #pragma hls_pipeline_init_interval 1
+        for (int i=0; i<burst_size+1; i++) {
+            bool last_beat = (i == burst_size);
 
-         datatype t[(BUS_SIZE/size)*2];
-printf("bus_size; %d size: %d size of t: %d \n", BUS_SIZE, size, (BUS_SIZE/size)*2);
-         // r = channels.r_channel.read();
-         get_r(r);
-
-         delta = first ? start_delta : 0;
-         axi_size_type offset = (received - delta) & (axi_size_type) 0xFFF8;
-printf("offset after init: %d \n", offset);
-        #pragma hls_unroll
-         data_load: for (ac_int<16, false> i=0; i<(BUS_SIZE/size); i++) {
-            if (((base_word + i * (size/WORD_SIZE)) >= address) &&
-                ((base_word + i * (size/WORD_SIZE)) < address + (count * (size/WORD_SIZE)))) {
-                  // data_in[i + offset] = r.data.slc<size>(i * size);
-printf("i>=start_delta: %s \n", (i>=start_delta) ? "true" : "false"); 
-printf("beat: %d i: %d start_delta: %d index_into_t: %d \n", beat, i, start_delta, beat+i-start_delta);
-                  (i >= start_delta) ? t[beat + i - start_delta] = r.data.slc<size>(i * size) :
-                                      t[beat + i - start_delta + (BUS_SIZE/size)] = r.data.slc<size>(i * size);
+            w.data = 0;
+            w.strb = set_strb(burst_start_delta, burst_end_delta, first, last_beat);
+            w.last = last_beat;
+            w.data = buffer.slc<BUS_SIZE>(0);
+            
+            send_w(w);
+            burst_lines_sent++;
+            
+            buffer = buffer >> BUS_SIZE;
+            
+            bytes_sent += ones(w.strb);
+            
+            for (int i=0; i<(1 << (BUS_BITS-bit_shift)); i++) {
+                if ((bytes_loaded + i * size_bytes) < byte_count) {
+                    buffer.set_slc((i * size_bits) + (offset << 3), data_out[(bytes_loaded>>bit_shift)+i]);
+                }
             }
-         }
 
-		    // problem:  loop above has "beat", which exceeds the size of the array, core dump!!
-printf("offset[1] = %d \n", offset);
-         if (start_delta > 0) {
-            if (!first || (first && !last)) {
-               // write data array
-              #pragma hls_unroll
-               for (int i=0; i<(BUS_SIZE/size); i++) {
-                  data_in[i + offset] = t[i];
-               }
-            }
+            bytes_loaded += BUS_BYTES;
+                                          
+            first = false;
+        }
 
-           #pragma hls_unroll
-            for (int i=0; i<(BUS_SIZE/size); i++) {
-               t[i] = t[i+(BUS_SIZE)/size];
-            }
-         } else {
-            // write data array
-           #pragma hls_unroll
-            for (int i=0; i<(BUS_SIZE/size); i++) {
-printf("offset[2] = %d \n", offset);
-               data_in[beat + i + offset] = t[i + beat];
-            }
-         }
+        ac::wait();
+        
+        get_b(b);
+        
+        if (b.resp != 0) return b.resp;
+        
+        lines_sent  += burst_lines_sent;
+        burst_start += (burst_size + 1) << BUS_BITS;
 
-         last = (received + STRIDE/(size/WORD_SIZE)) >= count;
-         words_moved = (first && last) ? all_words   :
-                       (first)         ? first_words :
-                       (last)          ? last_words  :
-                                         full_bus;
-                       
-         lines_received++;
-         received += words_moved;
-         delta += words_moved;
-         base_word += STRIDE;
-         first = false;
-      }
-   } while (lines_received < lines);  
+    } while (lines_sent < lines);
 
-   return r.resp;
-}
-*/
-
-
-
-template <typename datatype, int size> 
-axi_resp_type axi_master_interface::axi_burst_read_real_base(
-       axi_address_type   address,
-       datatype          *data_in,
-       axi_size_type      count)
-{
-   ar_payload ar;
-   r_payload r;
-
-   const axi_address_type address_mask  = ADDR_HIGH_BITS_MASK;
-   const ac_int<LEN_BITS, false> max_burst_len = (((ac_int<LEN_BITS, false>) 0) - 1);  // defines maximum possible bust size
-                                                          // if count is greater transfer is broken up into multiple bursts
-                                              
-   const axi_address_type first_line   = (address & address_mask);                                    // byte address of first line to write
-   const axi_address_type last_line    = ((address + (count * (size/WORD_SIZE)) - 1) & address_mask);                      // byte address of last line to write
-   const bool start_aligned            = (address == first_line);
-   const bool end_aligned              = (((address + count) & ADDR_LOW_BITS_MASK) == 0);
-   const axi_size_type lines           = (axi_size_type) (((last_line >> BUS_BITS) - (first_line >> BUS_BITS)) + 1);  // number of lines in the transfer             
-   const axi_size_type start_delta     = (axi_size_type) (address - first_line);                                   
-   const axi_size_type end_delta       = (axi_size_type) (((1 << BUS_BITS) - 1) - ((address + (count * (size/WORD_SIZE)) - 1) & ADDR_LOW_BITS_MASK));
-
-   const axi_size_type all_words       = count;
-   const axi_size_type first_words     = (STRIDE - start_delta) / (size/WORD_SIZE);
-   const axi_size_type last_words      = (end_delta / (size/WORD_SIZE)==0) ? (axi_size_type) (( STRIDE) / (size/WORD_SIZE)) : (axi_size_type) (end_delta / (size/WORD_SIZE));
-   const axi_size_type full_bus        = (STRIDE) / (size/WORD_SIZE);
-
-   axi_size_type words_moved;
-   axi_size_type burst_count = 0;
-   axi_size_type received    = 0;
-   axi_size_type lines_received  = 0;
-   axi_size_type delta       = 0;
-   axi_address_type max_burst;
-   axi_size_type burst_size;
-
-   axi_address_type burst_end;
-   axi_address_type base_word;
-   axi_resp_type    resp = 0;
-
-   bool first = true;
-   bool last;
-
-   axi_address_type burst_start;
-   axi_address_type four_k_boundary;
-
-   r.data = 0;
-
-   // set write address payload
-   
-   if (size == 0) return resp;
-
-   burst_start = first_line;   
-   base_word   = first_line;
-
-   do {
-
-      four_k_boundary = (((address + received) & (~(PAGE_MASK))) + (PAGE_SIZE) - (STRIDE));   // byte address of last line in 4K page
-      max_burst       = (address + received) + (((1 << LEN_BITS) - 1) << (BUS_BITS));         // byte address of last line in max burst size
-      burst_end       = min(last_line, four_k_boundary, max_burst);                       // smallest of remaining words, 4K boundary, or max_burst_len
-
-      burst_size = (burst_end - burst_start) >> BUS_BITS;
-
-      // set read address payload
-
-      ar.address  = address + received;
-      ar.id       = 4; // any number 
-      ar.len      = burst_size;
-      ar.size     = BUS_BITS; // full bus width
-      ar.burst    = 1; // incrementing
-      ar.lock     = 0; // unlocked
-      ar.cache    = 0; // uncached
-      ar.prot     = 0; // no protection
-      ar.qos      = 0; // normal qos
-
-      // channels.ar_channel.write(ar);
-      send_ar(ar);
-
-     #pragma hls_pipeline_init_interval 1
-      for (int i=0; i<burst_size+1; i++) {
-
-         // r = channels.r_channel.read();
-         get_r(r);
-
-        #pragma hls_unroll
-         data_load: for (ac_int<16, false> i=0; i<(BUS_SIZE/size); i++) {
-
-            if (((base_word + i) >= address) &&
-                ((base_word + i) < address + (count * (size/WORD_SIZE)))) {
-                  data_in[delta + i].d =  r.data.slc<size>(i * size);
-            }
-         }
-         last = (received + STRIDE/(size/WORD_SIZE)) >= count;
-         words_moved = (first && last) ? all_words   :
-                       (first)         ? first_words :
-                       (last)          ? last_words  :
-                                         full_bus;
-                       
-         lines_received++;
-         received += words_moved;
-         delta += words_moved;
-         base_word += STRIDE;
-         first = false;
-      }
-   } while (lines_received < lines);  
-
-   return r.resp;
+   return b.resp;
 }
 
 
 axi_resp_type  axi_master_interface::read(axi_address_type address, axi_8 &data_in)
 {
-  return axi_read_base<axi_8, 8>(address, data_in);
+    return axi_burst_read_base<axi_8, 0>(address, &data_in, 1);
 }
 
 axi_resp_type  axi_master_interface::read(axi_address_type address, axi_u8 &data_in)
 {
-   return axi_read_base<axi_u8, 8>(address, data_in);
+    return axi_burst_read_base<axi_u8, 0>(address, &data_in, 1);
 }
 
 axi_resp_type  axi_master_interface::read(axi_address_type address, axi_16 &data_in)
 {
-   return axi_read_base<axi_16, 16>(address, data_in);
+    return axi_burst_read_base<axi_16, 1>(address, &data_in, 1);
 }
 
 axi_resp_type  axi_master_interface::read(axi_address_type address, axi_u16 &data_in)
 {
-   return axi_read_base<axi_u16, 16>(address, data_in);
+    return axi_burst_read_base<axi_u16, 1>(address, &data_in, 1);
 }
 
 axi_resp_type  axi_master_interface::read(axi_address_type address, axi_32 &data_in)
 {
-   return axi_read_base<axi_32, 32>(address, data_in);
+    return axi_burst_read_base<axi_32, 2>(address, &data_in, 1);
 }
 
 axi_resp_type  axi_master_interface::read(axi_address_type address, axi_u32 &data_in)
 {
-   return axi_read_base<axi_u32, 32>(address, data_in);
+    return axi_burst_read_base<axi_u32, 2>(address, &data_in, 1);
 }
 
 axi_resp_type  axi_master_interface::read(axi_address_type address, axi_64 &data_in)
 {
-   return axi_read_base<axi_64, 64>(address, data_in);
+    return axi_burst_read_base<axi_64, 3>(address, &data_in, 1);
 }
 
 axi_resp_type  axi_master_interface::read(axi_address_type address, axi_u64 &data_in)
 {
-   return axi_read_base<axi_u64, 64>(address, data_in);
-}
-
-axi_resp_type  axi_master_interface::read(axi_address_type address, axi_128 &data_in)
-{
-   return axi_read_base<axi_128, 128>(address, data_in);
-}
-
-axi_resp_type  axi_master_interface::read(axi_address_type address, axi_u128 &data_in)
-{
-   return axi_read_base<axi_u128, 128>(address, data_in);
-}
-
-axi_resp_type  axi_master_interface::read(axi_address_type address, axi_256 &data_in)
-{
-   return axi_read_base<axi_256, 256>(address, data_in);
-}
-
-axi_resp_type  axi_master_interface::read(axi_address_type address, axi_u256 &data_in)
-{
-   return axi_read_base<axi_u256, 256>(address, data_in);
-}
-
-axi_resp_type  axi_master_interface::read(axi_address_type address, axi_512 &data_in)
-{
-   return axi_read_base<axi_512, 512>(address, data_in);
-}
-
-axi_resp_type  axi_master_interface::read(axi_address_type address, axi_u512 &data_in)
-{
-   return axi_read_base<axi_u512, 512>(address, data_in);
-}
-
-axi_resp_type  axi_master_interface::read(axi_address_type address, axi_1024 &data_in)
-{
-   return axi_read_base<axi_1024, 1024>(address, data_in);
-}
-
-axi_resp_type  axi_master_interface::read(axi_address_type address, axi_u1024 &data_in)
-{
-   return axi_read_base<axi_u1024, 1024>(address, data_in);
+    return axi_burst_read_base<axi_u64, 3>(address, &data_in, 1);
 }
 
 axi_resp_type  axi_master_interface::read(axi_address_type address, axi_float &data_in)
 {
-   return axi_read_real<axi_float, 32>(address, data_in);
+    axi_u32 float_in;
+    axi_resp_type r;
+    
+    r = axi_burst_read_base<axi_u32, 2>(address, &float_in, 1);
+    data_in.set_data(float_in.slc<32>(0));
+    return r;
 }
 
 axi_resp_type  axi_master_interface::read(axi_address_type address, axi_double &data_in)
 {
-   return axi_read_real<axi_double, 64>(address, data_in);
+    axi_u64 double_in;
+    axi_resp_type r;
+        
+    r = axi_burst_read_base<axi_u64, 3>(address, &double_in, 1);
+    data_in.set_data(double_in.slc<64>(0));
+    return r;
 }
 
 axi_resp_type  axi_master_interface::write(axi_address_type address, axi_8 data_out)
 {
-   return axi_write_base<axi_8, 8>(address, data_out);
+    return axi_burst_write_base<axi_8, 0>(address, &data_out, 1);
 }
 
 axi_resp_type  axi_master_interface::write(axi_address_type address, axi_u8 data_out)
 {
-   return axi_write_base<axi_u8, 8>(address, data_out);
+    return axi_burst_write_base<axi_u8, 0>(address, &data_out, 1);
 }
 
 axi_resp_type  axi_master_interface::write(axi_address_type address, axi_16 data_out)
 {
-   return axi_write_base<axi_16, 16>(address, data_out);
+    return axi_burst_write_base<axi_16, 1>(address, &data_out, 1);
 }
 
 axi_resp_type  axi_master_interface::write(axi_address_type address, axi_u16 data_out)
 {
-   return axi_write_base<axi_u16, 16>(address, data_out);
+    return axi_burst_write_base<axi_u16, 1>(address, &data_out, 1);
 }
 
 axi_resp_type  axi_master_interface::write(axi_address_type address, axi_32 data_out)
 {
-   return axi_write_base<axi_32, 32>(address, data_out);
+    return axi_burst_write_base<axi_32, 2>(address, &data_out, 1);
 }
 
 axi_resp_type  axi_master_interface::write(axi_address_type address, axi_u32 data_out)
 {
-   return axi_write_base<axi_u32, 32>(address, data_out);
+    return axi_burst_write_base<axi_u32, 2>(address, &data_out, 1);
 }
 
 axi_resp_type  axi_master_interface::write(axi_address_type address, axi_64 data_out)
 {
-   return axi_write_base<axi_64, 64>(address, data_out);
+    return axi_burst_write_base<axi_64, 3>(address, &data_out, 1);
 }
 
 axi_resp_type  axi_master_interface::write(axi_address_type address, axi_u64 data_out)
 {
-   return axi_write_base<axi_u64, 64>(address, data_out);
-}
-
-axi_resp_type  axi_master_interface::write(axi_address_type address, axi_128 data_out)
-{
-   return axi_write_base<axi_128, 128>(address, data_out);
-}
-
-axi_resp_type  axi_master_interface::write(axi_address_type address, axi_u128 data_out)
-{
-   return axi_write_base<axi_u128, 128>(address, data_out);
-}
-
-axi_resp_type  axi_master_interface::write(axi_address_type address, axi_256 data_out)
-{
-   return axi_write_base<axi_256, 256>(address, data_out);
-}
-
-axi_resp_type  axi_master_interface::write(axi_address_type address, axi_u256 data_out)
-{
-   return axi_write_base<axi_u256, 256>(address, data_out);
-}
-
-axi_resp_type  axi_master_interface::write(axi_address_type address, axi_512 data_out)
-{
-   return axi_write_base<axi_512, 512>(address, data_out);
-}
-
-axi_resp_type  axi_master_interface::write(axi_address_type address, axi_u512 data_out)
-{
-   return axi_write_base<axi_u512, 512>(address, data_out);
-}
-
-axi_resp_type  axi_master_interface::write(axi_address_type address, axi_1024 data_out)
-{
-   return axi_write_base<axi_1024, 1024>(address, data_out);
-}
-
-axi_resp_type  axi_master_interface::write(axi_address_type address, axi_u1024 data_out)
-{
-   return axi_write_base<axi_u1024, 1024>(address, data_out);
+    return axi_burst_write_base<axi_u64, 3>(address, &data_out, 1);
 }
 
 axi_resp_type  axi_master_interface::write(axi_address_type address, axi_float data_out)
 {
-   return axi_write_real<axi_float, 32>(address, data_out);
+    axi_u32 float_out;
+    
+    float_out.set_slc(0, (axi_u32) data_out.data());
+    return axi_burst_write_base<axi_u32, 2>(address, &float_out, 1);
 }
 
 axi_resp_type  axi_master_interface::write(axi_address_type address, axi_double data_out)
 {
-   return axi_write_real<axi_double, 64>(address, data_out);
+    axi_u64 double_out;
+    
+    double_out.set_slc(0, (axi_u64) data_out.data());
+    return axi_burst_write_base<axi_u64, 3>(address, &double_out, 1);
 }
 
 axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_8   *data, axi_size_type size)
 {
-   return axi_burst_write_base<axi_8, 8>(address, data, size);
+   return axi_burst_write_base<axi_8, 0>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_u8  *data, axi_size_type size)
 {
-   return axi_burst_write_base<axi_u8, 8>(address, data, size);
+   return axi_burst_write_base<axi_u8, 0>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_16  *data, axi_size_type size)
 {
-   return axi_burst_write_base<axi_16, 16>(address, data, size);
+   return axi_burst_write_base<axi_16, 1>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_u16 *data, axi_size_type size)
 {
-   return axi_burst_write_base<axi_u16, 16>(address, data, size);
+   return axi_burst_write_base<axi_u16, 1>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_32  *data, axi_size_type size)
 {
-   return axi_burst_write_base<axi_32, 32>(address, data, size);
+   return axi_burst_write_base<axi_32, 2>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_u32 *data, axi_size_type size)
 {
-   return axi_burst_write_base<axi_u32, 32>(address, data, size);
+   return axi_burst_write_base<axi_u32, 2>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_64  *data, axi_size_type size)
 {
-   return axi_burst_write_base<axi_64, 64>(address, data, size);
+   return axi_burst_write_base<axi_64, 3>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_u64 *data, axi_size_type size)
 {
-   return axi_burst_write_base<axi_u64, 64>(address, data, size);
+   return axi_burst_write_base<axi_u64, 3>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_128  *data, axi_size_type size)
 {
-   return axi_burst_write_base<axi_128, 128>(address, data, size);
+   return axi_burst_write_base<axi_128, 4>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_u128 *data, axi_size_type size)
 {
-   return axi_burst_write_base<axi_u128, 128>(address, data, size);
+   return axi_burst_write_base<axi_u128, 4>(address, data, size);
 }
 
-axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_256  *data, axi_size_type size)
+axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_256 *data, axi_size_type size)
 {
-   return axi_burst_write_base<axi_256, 256>(address, data, size);
+   return axi_burst_write_base<axi_256, 5>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_u256 *data, axi_size_type size)
 {
-   return axi_burst_write_base<axi_u256, 256>(address, data, size);
+   return axi_burst_write_base<axi_u256, 5>(address, data, size);
 }
 
-axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_512  *data, axi_size_type size)
+axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_512 *data, axi_size_type size)
 {
-   return axi_burst_write_base<axi_512, 512>(address, data, size);
+   return axi_burst_write_base<axi_512, 6>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_u512 *data, axi_size_type size)
 {
-   return axi_burst_write_base<axi_u512, 512>(address, data, size);
+   return axi_burst_write_base<axi_u512, 6>(address, data, size);
 }
 
-axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_1024  *data, axi_size_type size)
+axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_1024 *data, axi_size_type size)
 {
-   return axi_burst_write_base<axi_1024, 1024>(address, data, size);
+   return axi_burst_write_base<axi_1024, 7>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_u1024 *data, axi_size_type size)
 {
-   return axi_burst_write_base<axi_u1024, 1024>(address, data, size);
+   return axi_burst_write_base<axi_u1024, 7>(address, data, size);
 }
-
+/*
 axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_float *data, axi_size_type size)
 {
-   return axi_burst_write_real_base<axi_float, 32>(address, data, size);
+   return axi_burst_write_base<axi_float, 32>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_write(axi_address_type address, axi_double *data, axi_size_type size)
 {
-   return axi_burst_write_real_base<axi_double, 64>(address, data, size);
+   return axi_burst_write_base<axi_double, 64>(address, data, size);
 }
-
+*/
 axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_8   *data, axi_size_type size)
 {
-   return axi_burst_read_base<axi_8, 8>(address, data, size);
+   return axi_burst_read_base<axi_8, 0>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_u8  *data, axi_size_type size)
 {
-   return axi_burst_read_base<axi_u8, 8>(address, data, size);
+   return axi_burst_read_base<axi_u8, 0>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_16  *data, axi_size_type size)
 {
-   return axi_burst_read_base<axi_16, 16>(address, data, size);
+   return axi_burst_read_base<axi_16, 1>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_u16 *data, axi_size_type size)
 {
-   return axi_burst_read_base<axi_u16, 16>(address, data, size);
+   return axi_burst_read_base<axi_u16, 1>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_32  *data, axi_size_type size)
 {
-   return axi_burst_read_base<axi_32, 32>(address, data, size);
+   return axi_burst_read_base<axi_32, 2>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_u32 *data, axi_size_type size)
 {
-   return axi_burst_read_base<axi_u32, 32>(address, data, size);
+   return axi_burst_read_base<axi_u32, 2>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_64  *data, axi_size_type size)
 {
-   return axi_burst_read_base<axi_64, 64>(address, data, size);
+   return axi_burst_read_base<axi_64, 3>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_u64 *data, axi_size_type size)
 {
-   return axi_burst_read_base<axi_u64, 64>(address, data, size);
+   return axi_burst_read_base<axi_u64, 3>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_128  *data, axi_size_type size)
 {
-   return axi_burst_read_base<axi_128, 128>(address, data, size);
+   return axi_burst_read_base<axi_128, 4>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_u128 *data, axi_size_type size)
 {
-   return axi_burst_read_base<axi_u128, 128>(address, data, size);
+   return axi_burst_read_base<axi_u128, 4>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_256  *data, axi_size_type size)
 {
-   return axi_burst_read_base<axi_256, 256>(address, data, size);
+   return axi_burst_read_base<axi_256, 5>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_u256 *data, axi_size_type size)
 {
-   return axi_burst_read_base<axi_u256, 256>(address, data, size);
+   return axi_burst_read_base<axi_u256, 5>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_512  *data, axi_size_type size)
 {
-   return axi_burst_read_base<axi_512, 512>(address, data, size);
+   return axi_burst_read_base<axi_512, 6>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_u512 *data, axi_size_type size)
 {
-   return axi_burst_read_base<axi_u512, 512>(address, data, size);
+   return axi_burst_read_base<axi_u512, 6>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_1024  *data, axi_size_type size)
 {
-   return axi_burst_read_base<axi_1024, 1024>(address, data, size);
+   return axi_burst_read_base<axi_1024, 7>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_u1024 *data, axi_size_type size)
 {
-   return axi_burst_read_base<axi_u1024, 1024>(address, data, size);
+   return axi_burst_read_base<axi_u1024, 7>(address, data, size);
 }
 
+/*
 axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_float *data, axi_size_type size)
 {
-   return axi_burst_read_real_base<axi_float, 32>(address, data, size);
+   return axi_burst_read_base<axi_float, 2>(address, data, size);
 }
 
 axi_resp_type axi_master_interface::burst_read(axi_address_type address, axi_double *data, axi_size_type size)
 {
-   return axi_burst_read_real_base<axi_double, 64>(address, data, size);
+   return axi_burst_read_base<axi_double, 3>(address, data, size);
 }
-
+*/

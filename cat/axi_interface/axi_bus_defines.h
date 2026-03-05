@@ -9,16 +9,18 @@
 //          6 =  512 bits wide
 //          7 = 1024 bits wide
 //
-#define BUS_BITS       6
+#define BUS_BITS       7
 #define WORD_SIZE      8
-#define STRIDE        (1 << BUS_BITS)
-#define BUS_SIZE      ((STRIDE) * (WORD_SIZE))
+#define BUS_BYTES      (1 << BUS_BITS)
+#define BUS_SIZE      ((1 << (BUS_BITS)) * (WORD_SIZE))
+#define STRIDE        ((BUS_SIZE)/(WORD_SIZE))
 
 // AXI field size constants
 
-#define READ_ID_BITS  16
+#define M_BITS         4
+#define READ_ID_BITS   4
 #define WRITE_ID_BITS  (READ_ID_BITS)
-#define ADDRESS_BITS  64
+#define ADDRESS_BITS  32
 #define LEN_BITS       8
 #define DATA_BITS      (BUS_SIZE)
 #define SIZE_BITS      3
@@ -35,4 +37,4 @@
 
 #define ADDR_LOW_BITS_MASK  ((1 << (BUS_BITS)) - 1)
 #define ADDR_HIGH_BITS_MASK ((ac_int<ADDRESS_BITS, false>) ((((ac_int<ADDRESS_BITS, false>) 0) - 1) ^ (ADDR_LOW_BITS_MASK)))
-#define BYTE_MASK           ((ac_int<BYTE_BITS, false>) (((ac_int<BUS_SIZE+1, false>) 1 << ((ac_int<BUS_SIZE+1, false>) 1 << (BUS_BITS))) - 1))
+#define BYTE_MASK ((ac_int<BYTE_BITS, false>) (((ac_int<BYTE_BITS+1, false>) 1 << ((ac_int<BYTE_BITS+1, false>) 1 << (BUS_BITS))) - 1))

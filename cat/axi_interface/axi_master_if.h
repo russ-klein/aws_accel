@@ -218,9 +218,17 @@ public:
     axi_resp_type read(axi_address_type address, axi_u32     &data_in);
     axi_resp_type read(axi_address_type address, axi_64      &data_in);
     axi_resp_type read(axi_address_type address, axi_u64     &data_in);
+    axi_resp_type read(axi_address_type address, axi_128     &data_in);
+    axi_resp_type read(axi_address_type address, axi_u128    &data_in);
+    axi_resp_type read(axi_address_type address, axi_256     &data_in);
+    axi_resp_type read(axi_address_type address, axi_u256    &data_in);
+    axi_resp_type read(axi_address_type address, axi_512     &data_in);
+    axi_resp_type read(axi_address_type address, axi_u512    &data_in);
+    axi_resp_type read(axi_address_type address, axi_1024    &data_in);
+    axi_resp_type read(axi_address_type address, axi_u1024   &data_in);
     axi_resp_type read(axi_address_type address, axi_float   &data_in);
     axi_resp_type read(axi_address_type address, axi_double  &data_in);
-
+    
     axi_resp_type write(axi_address_type address, axi_8       data_out);
     axi_resp_type write(axi_address_type address, axi_u8      data_out);
     axi_resp_type write(axi_address_type address, axi_16      data_out);
@@ -229,6 +237,14 @@ public:
     axi_resp_type write(axi_address_type address, axi_u32     data_out);
     axi_resp_type write(axi_address_type address, axi_64      data_out);
     axi_resp_type write(axi_address_type address, axi_u64     data_out);
+    axi_resp_type write(axi_address_type address, axi_128     data_out);
+    axi_resp_type write(axi_address_type address, axi_u128    data_out);
+    axi_resp_type write(axi_address_type address, axi_256     data_out);
+    axi_resp_type write(axi_address_type address, axi_u256    data_out);
+    axi_resp_type write(axi_address_type address, axi_512     data_out);
+    axi_resp_type write(axi_address_type address, axi_u512    data_out);
+    axi_resp_type write(axi_address_type address, axi_1024    data_out);
+    axi_resp_type write(axi_address_type address, axi_u1024   data_out);
     axi_resp_type write(axi_address_type address, axi_float   data_out);
     axi_resp_type write(axi_address_type address, axi_double  data_out);
 

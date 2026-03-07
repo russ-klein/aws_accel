@@ -140,7 +140,7 @@ void pass_data(axi_master_interface &axi_bus)
 #define N 128
 /*
  
-   TODO: templatetize the 
+   TODO: templatetize the single transfer test
  
    Does not work, need some more powerful c++ Voodoo
 template <typename T>
@@ -200,7 +200,7 @@ int test_u8_single_transfer(
 
    for (int i=0; i<N; i++) axi_bus.write(address + i * 1, write_array[i]);
 
-   pass_data(axi_bus); 
+   // pass_data(axi_bus);
 
    for (int i=0; i<N; i++) axi_bus.read(address + i * 1, read_array[i]);
 
@@ -234,7 +234,7 @@ int test_8_single_transfer(
 
    for (int i=0; i<N; i++) axi_bus.write(address + i * 1, write_array[i]);
 
-   pass_data(axi_bus); 
+   // pass_data(axi_bus);
 
    for (int i=0; i<N; i++) axi_bus.read(address + i * 1, read_array[i]);
 
@@ -269,7 +269,7 @@ int test_u16_single_transfer(
 
    for (int i=0; i<N; i++) axi_bus.write(address + i * 2, write_array[i]);
 
-   pass_data(axi_bus); 
+   // pass_data(axi_bus);
 
    for (int i=0; i<N; i++) axi_bus.read(address + i * 2, read_array[i]);
 
@@ -304,7 +304,7 @@ int test_16_single_transfer(
 
    for (int i=0; i<N; i++) axi_bus.write(address + i * 2, write_array[i]);
 
-   pass_data(axi_bus); 
+   // pass_data(axi_bus);
 
    for (int i=0; i<N; i++) axi_bus.read(address + i * 2, read_array[i]);
 
@@ -338,7 +338,7 @@ int test_u32_single_transfer(
 
    for (int i=0; i<N; i++) axi_bus.write(address + i * 4, write_array[i]);
 
-   pass_data(axi_bus); 
+   // pass_data(axi_bus);
 
    for (int i=0; i<N; i++) axi_bus.read(address + i * 4, read_array[i]);
 
@@ -373,7 +373,7 @@ int test_32_single_transfer(
 
    for (int i=0; i<N; i++) axi_bus.write(address + i * 4, write_array[i]);
 
-   pass_data(axi_bus); 
+   // pass_data(axi_bus);
 
    for (int i=0; i<N; i++) axi_bus.read(address + i * 4, read_array[i]);
 
@@ -408,7 +408,7 @@ int test_u64_single_transfer(
 
    for (int i=0; i<N; i++) axi_bus.write(address + i * 8, write_array[i]);
 
-   pass_data(axi_bus); 
+   // pass_data(axi_bus);
 
    for (int i=0; i<N; i++) axi_bus.read(address + i * 8, read_array[i]);
 
@@ -443,7 +443,7 @@ int test_64_single_transfer(
 
    for (int i=0; i<N; i++) axi_bus.write(address + i * 8, write_array[i]);
 
-   pass_data(axi_bus); 
+   // pass_data(axi_bus);
 
    for (int i=0; i<N; i++) axi_bus.read(address + i * 8, read_array[i]);
 
@@ -459,6 +459,283 @@ int test_64_single_transfer(
     
    return errors;
 }
+
+int test_u128_single_transfer(
+    axi_master_interface  &axi_bus,
+    axi_address_type address)
+{
+   axi_u128 write_array[N];
+   axi_u128 read_array[N];
+   int errors = 0;
+   bool pass = true;
+   bool verbose = false;
+
+   print_string(axi_bus, "u128 single transfer test...  ");
+
+   for (int i=0; i<N; i++) write_array[i] = i;
+   prep_write(axi_bus, N);
+
+   for (int i=0; i<N; i++) axi_bus.write(address + i * 16, write_array[i]);
+
+   // pass_data(axi_bus);
+
+   for (int i=0; i<N; i++) axi_bus.read(address + i * 16, read_array[i]);
+
+   for (int i=0; i<N; i++) {
+      if (write_array[i] != read_array[i]) {
+         pass = false;
+         errors++;
+         if (verbose) report_difference(axi_bus, i, write_array[i], read_array[i]);
+      }
+   }
+ 
+   print_string(axi_bus, pass ? "Passed \n\r" : "Failed \n\r");
+    
+   return errors;
+}
+
+
+int test_128_single_transfer(
+    axi_master_interface  &axi_bus,
+    axi_address_type address)
+{
+   axi_128 write_array[N];
+   axi_128 read_array[N];
+   int errors = 0;
+   bool pass = true;
+   bool verbose = false;
+
+   print_string(axi_bus, "128 single transfer test...  ");
+
+   for (int i=0; i<N; i++) write_array[i] = i;
+   prep_write(axi_bus, N);
+
+   for (int i=0; i<N; i++) axi_bus.write(address + i * 16, write_array[i]);
+
+   // pass_data(axi_bus);
+
+   for (int i=0; i<N; i++) axi_bus.read(address + i * 16, read_array[i]);
+
+   for (int i=0; i<N; i++) {
+      if (write_array[i] != read_array[i]) {
+         pass = false;
+         errors++;
+         if (verbose) report_difference(axi_bus, i, write_array[i], read_array[i]);
+      }
+   }
+ 
+   print_string(axi_bus, pass ? "Passed \n\r" : "Failed \n\r");
+    
+   return errors;
+}
+
+int test_u256_single_transfer(
+    axi_master_interface  &axi_bus,
+    axi_address_type address)
+{
+   axi_u256 write_array[N];
+   axi_u256 read_array[N];
+   int errors = 0;
+   bool pass = true;
+   bool verbose = false;
+
+   print_string(axi_bus, "u256 single transfer test...  ");
+
+   for (int i=0; i<N; i++) write_array[i] = i;
+   prep_write(axi_bus, N);
+
+   for (int i=0; i<N; i++) axi_bus.write(address + i * 32, write_array[i]);
+
+   // pass_data(axi_bus);
+
+   for (int i=0; i<N; i++) axi_bus.read(address + i * 32, read_array[i]);
+
+   for (int i=0; i<N; i++) {
+      if (write_array[i] != read_array[i]) {
+         pass = false;
+         errors++;
+         if (verbose) report_difference(axi_bus, i, write_array[i], read_array[i]);
+      }
+   }
+ 
+   print_string(axi_bus, pass ? "Passed \n\r" : "Failed \n\r");
+    
+   return errors;
+}
+
+
+int test_256_single_transfer(
+    axi_master_interface  &axi_bus,
+    axi_address_type address)
+{
+   axi_256 write_array[N];
+   axi_256 read_array[N];
+   int errors = 0;
+   bool pass = true;
+   bool verbose = false;
+
+   print_string(axi_bus, "256 single transfer test...  ");
+
+   for (int i=0; i<N; i++) write_array[i] = i;
+   prep_write(axi_bus, N);
+
+   for (int i=0; i<N; i++) axi_bus.write(address + i * 32, write_array[i]);
+
+   // pass_data(axi_bus);
+
+   for (int i=0; i<N; i++) axi_bus.read(address + i * 32, read_array[i]);
+
+   for (int i=0; i<N; i++) {
+      if (write_array[i] != read_array[i]) {
+         pass = false;
+         errors++;
+         if (verbose) report_difference(axi_bus, i, write_array[i], read_array[i]);
+      }
+   }
+ 
+   print_string(axi_bus, pass ? "Passed \n\r" : "Failed \n\r");
+    
+   return errors;
+}
+
+int test_u512_single_transfer(
+    axi_master_interface  &axi_bus,
+    axi_address_type address)
+{
+   axi_u512 write_array[N];
+   axi_u512 read_array[N];
+   int errors = 0;
+   bool pass = true;
+   bool verbose = false;
+
+   print_string(axi_bus, "u512 single transfer test...  ");
+
+   for (int i=0; i<N; i++) write_array[i] = i;
+   prep_write(axi_bus, N);
+
+   for (int i=0; i<N; i++) axi_bus.write(address + i * 64, write_array[i]);
+
+   // pass_data(axi_bus);
+
+   for (int i=0; i<N; i++) axi_bus.read(address + i * 64, read_array[i]);
+
+   for (int i=0; i<N; i++) {
+      if (write_array[i] != read_array[i]) {
+         pass = false;
+         errors++;
+         if (verbose) report_difference(axi_bus, i, write_array[i], read_array[i]);
+      }
+   }
+ 
+   print_string(axi_bus, pass ? "Passed \n\r" : "Failed \n\r");
+    
+   return errors;
+}
+
+
+int test_512_single_transfer(
+    axi_master_interface  &axi_bus,
+    axi_address_type address)
+{
+   axi_512 write_array[N];
+   axi_512 read_array[N];
+   int errors = 0;
+   bool pass = true;
+   bool verbose = false;
+
+   print_string(axi_bus, "512 single transfer test...  ");
+
+   for (int i=0; i<N; i++) write_array[i] = i;
+   prep_write(axi_bus, N);
+
+   for (int i=0; i<N; i++) axi_bus.write(address + i * 64, write_array[i]);
+
+   // pass_data(axi_bus);
+
+   for (int i=0; i<N; i++) axi_bus.read(address + i * 64, read_array[i]);
+
+   for (int i=0; i<N; i++) {
+      if (write_array[i] != read_array[i]) {
+         pass = false;
+         errors++;
+         if (verbose) report_difference(axi_bus, i, write_array[i], read_array[i]);
+      }
+   }
+ 
+   print_string(axi_bus, pass ? "Passed \n\r" : "Failed \n\r");
+    
+   return errors;
+}
+
+int test_u1024_single_transfer(
+    axi_master_interface  &axi_bus,
+    axi_address_type address)
+{
+   axi_u1024 write_array[N];
+   axi_u1024 read_array[N];
+   int errors = 0;
+   bool pass = true;
+   bool verbose = false;
+
+   print_string(axi_bus, "u1024 single transfer test...  ");
+
+   for (int i=0; i<N; i++) write_array[i] = i;
+   prep_write(axi_bus, N);
+
+   for (int i=0; i<N; i++) axi_bus.write(address + i * 128, write_array[i]);
+
+   // pass_data(axi_bus);
+
+   for (int i=0; i<N; i++) axi_bus.read(address + i * 128, read_array[i]);
+
+   for (int i=0; i<N; i++) {
+      if (write_array[i] != read_array[i]) {
+         pass = false;
+         errors++;
+         if (verbose) report_difference(axi_bus, i, write_array[i], read_array[i]);
+      }
+   }
+ 
+   print_string(axi_bus, pass ? "Passed \n\r" : "Failed \n\r");
+    
+   return errors;
+}
+
+
+int test_1024_single_transfer(
+    axi_master_interface  &axi_bus,
+    axi_address_type address)
+{
+   axi_1024 write_array[N];
+   axi_1024 read_array[N];
+   int errors = 0;
+   bool pass = true;
+   bool verbose = false;
+
+   print_string(axi_bus, "1024 single transfer test...  ");
+
+   for (int i=0; i<N; i++) write_array[i] = i;
+   prep_write(axi_bus, N);
+
+   for (int i=0; i<N; i++) axi_bus.write(address + i * 128, write_array[i]);
+
+   // pass_data(axi_bus);
+
+   for (int i=0; i<N; i++) axi_bus.read(address + i * 128, read_array[i]);
+
+   for (int i=0; i<N; i++) {
+      if (write_array[i] != read_array[i]) {
+         pass = false;
+         errors++;
+         if (verbose) report_difference(axi_bus, i, write_array[i], read_array[i]);
+      }
+   }
+ 
+   print_string(axi_bus, pass ? "Passed \n\r" : "Failed \n\r");
+    
+   return errors;
+}
+
 
 int test_float_single_transfer(
     axi_master_interface  &axi_bus,
@@ -477,7 +754,7 @@ int test_float_single_transfer(
 
    for (int i=0; i<N; i++) axi_bus.write(address + i * 4, write_array[i]);
 
-   pass_data(axi_bus); 
+   // pass_data(axi_bus);
 
    for (int i=0; i<N; i++) axi_bus.read(address + i * 4, read_array[i]);
 
@@ -512,7 +789,7 @@ int test_double_single_transfer(
 
    for (int i=0; i<N; i++) axi_bus.write(address + i * 8, write_array[i]);
 
-   pass_data(axi_bus); 
+   // pass_data(axi_bus); 
 
    for (int i=0; i<N; i++) axi_bus.read(address + i * 8, read_array[i]);
 
@@ -655,17 +932,25 @@ void counter(
     
     // single access operation tests
 
-    errors += test_u8_single_transfer (axi_bus, 0x61000000);
-    errors += test_8_single_transfer  (axi_bus, 0x61000400);
-    errors += test_u16_single_transfer(axi_bus, 0x61000800);
-    errors += test_16_single_transfer (axi_bus, 0x61000C00);
-    errors += test_u32_single_transfer(axi_bus, 0x61001000);
-    errors += test_32_single_transfer (axi_bus, 0x61001400);
-    errors += test_u64_single_transfer(axi_bus, 0x61001800);
-    errors += test_64_single_transfer (axi_bus, 0x61001C00);
+                      errors += test_u8_single_transfer   (axi_bus, 0x61000000);
+                      errors += test_8_single_transfer    (axi_bus, 0x61000400);
+    if (BUS_BITS > 0) errors += test_u16_single_transfer  (axi_bus, 0x61000800);
+    if (BUS_BITS > 0) errors += test_16_single_transfer   (axi_bus, 0x61000C00);
+    if (BUS_BITS > 1) errors += test_u32_single_transfer  (axi_bus, 0x61001000);
+    if (BUS_BITS > 1) errors += test_32_single_transfer   (axi_bus, 0x61001400);
+    if (BUS_BITS > 2) errors += test_u64_single_transfer  (axi_bus, 0x61001800);
+    if (BUS_BITS > 2) errors += test_64_single_transfer   (axi_bus, 0x61001C00);
+    if (BUS_BITS > 3) errors += test_u128_single_transfer (axi_bus, 0x61000000);
+    if (BUS_BITS > 3) errors += test_128_single_transfer  (axi_bus, 0x61000400);
+    if (BUS_BITS > 4) errors += test_u256_single_transfer (axi_bus, 0x61000800);
+    if (BUS_BITS > 4) errors += test_256_single_transfer  (axi_bus, 0x61000C00);
+    if (BUS_BITS > 5) errors += test_u512_single_transfer (axi_bus, 0x61001000);
+    if (BUS_BITS > 5) errors += test_512_single_transfer  (axi_bus, 0x61001400);
+    if (BUS_BITS > 6) errors += test_u1024_single_transfer(axi_bus, 0x61001800);
+    if (BUS_BITS > 6) errors += test_1024_single_transfer (axi_bus, 0x61001C00);
 
-    errors += test_float_single_transfer  (axi_bus, 0x61002000);
-    errors += test_double_single_transfer (axi_bus, 0x61002400);
+    if (BUS_BITS > 1) errors += test_float_single_transfer  (axi_bus, 0x61002000);
+    if (BUS_BITS > 2) errors += test_double_single_transfer (axi_bus, 0x61002400);
 
     // burst transfer operation tests
        

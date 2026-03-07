@@ -545,13 +545,54 @@ axi_resp_type  axi_master_interface::read(axi_address_type address, axi_u64 &dat
     return axi_burst_read_base<axi_u64, 3>(address, &data_in, 1);
 }
 
+axi_resp_type  axi_master_interface::read(axi_address_type address, axi_128 &data_in)
+{
+    return axi_burst_read_base<axi_128, 4>(address, &data_in, 1);
+}
+
+axi_resp_type  axi_master_interface::read(axi_address_type address, axi_u128 &data_in)
+{
+    return axi_burst_read_base<axi_u128, 4>(address, &data_in, 1);
+}
+
+axi_resp_type  axi_master_interface::read(axi_address_type address, axi_256 &data_in)
+{
+    return axi_burst_read_base<axi_256, 5>(address, &data_in, 1);
+}
+
+axi_resp_type  axi_master_interface::read(axi_address_type address, axi_u256 &data_in)
+{
+    return axi_burst_read_base<axi_u256, 5>(address, &data_in, 1);
+}
+
+axi_resp_type  axi_master_interface::read(axi_address_type address, axi_512 &data_in)
+{
+    return axi_burst_read_base<axi_512, 6>(address, &data_in, 1);
+}
+
+axi_resp_type  axi_master_interface::read(axi_address_type address, axi_u512 &data_in)
+{
+    return axi_burst_read_base<axi_u512, 6>(address, &data_in, 1);
+}
+
+axi_resp_type  axi_master_interface::read(axi_address_type address, axi_1024 &data_in)
+{
+    return axi_burst_read_base<axi_1024, 7>(address, &data_in, 1);
+}
+
+axi_resp_type  axi_master_interface::read(axi_address_type address, axi_u1024 &data_in)
+{
+    return axi_burst_read_base<axi_u1024, 7>(address, &data_in, 1);
+}
+
+
 axi_resp_type  axi_master_interface::read(axi_address_type address, axi_float &data_in)
 {
     axi_u32 float_in;
     axi_resp_type r;
     
     r = axi_burst_read_base<axi_u32, 2>(address, &float_in, 1);
-    data_in.set_data(float_in.slc<32>(0));
+    data_in.set_data((int) float_in.slc<32>(0));
     return r;
 }
 
@@ -604,6 +645,47 @@ axi_resp_type  axi_master_interface::write(axi_address_type address, axi_u64 dat
 {
     return axi_burst_write_base<axi_u64, 3>(address, &data_out, 1);
 }
+
+axi_resp_type  axi_master_interface::write(axi_address_type address, axi_128 data_out)
+{
+    return axi_burst_write_base<axi_128, 4>(address, &data_out, 1);
+}
+
+axi_resp_type  axi_master_interface::write(axi_address_type address, axi_u128 data_out)
+{
+    return axi_burst_write_base<axi_u128, 4>(address, &data_out, 1);
+}
+
+axi_resp_type  axi_master_interface::write(axi_address_type address, axi_256 data_out)
+{
+    return axi_burst_write_base<axi_256, 5>(address, &data_out, 1);
+}
+
+axi_resp_type  axi_master_interface::write(axi_address_type address, axi_u256 data_out)
+{
+    return axi_burst_write_base<axi_u256, 5>(address, &data_out, 1);
+}
+
+axi_resp_type  axi_master_interface::write(axi_address_type address, axi_512 data_out)
+{
+    return axi_burst_write_base<axi_512, 6>(address, &data_out, 1);
+}
+
+axi_resp_type  axi_master_interface::write(axi_address_type address, axi_u512 data_out)
+{
+    return axi_burst_write_base<axi_u512, 6>(address, &data_out, 1);
+}
+
+axi_resp_type  axi_master_interface::write(axi_address_type address, axi_1024 data_out)
+{
+    return axi_burst_write_base<axi_1024, 7>(address, &data_out, 1);
+}
+
+axi_resp_type  axi_master_interface::write(axi_address_type address, axi_u1024 data_out)
+{
+    return axi_burst_write_base<axi_u1024, 7>(address, &data_out, 1);
+}
+
 
 axi_resp_type  axi_master_interface::write(axi_address_type address, axi_float data_out)
 {

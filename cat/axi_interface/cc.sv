@@ -24,7 +24,7 @@
      bit tx_error;
      bit rx_error;
      bit [31:12] unused;
-   }
+   } status_register;
 
    typedef enum {ST_IDLE, ST_OPEN, 
                 ST_CLOSE, ST_READ, ST_WRITE} st_state_type;

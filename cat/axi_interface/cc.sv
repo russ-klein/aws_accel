@@ -56,14 +56,10 @@
 int driver_open(int *drv_handle) 
 {
    unsigned int status_reg = readl(ST_REG_ADDR);
-
    if (status_reg.in_use) return E_BUSY;
-   
    writel(PH_OPEN, CTRL_REG_ADDR);
-
    status_reg = readl(ST_REG_ADDR);
    if (status_reg.error_code) return E_ERROR;
-
    *drv_handle = next_handle();
    return SUCCESS;
 }
@@ -73,23 +69,17 @@ int driver_write(const int drv_handle,
                  const unsigned int count)
 {
    if (!valid_hnd(drv_handle)) return E_NOT_OPEN;
-
    writel(PH_WRITE, CTRL_REG_ADDR);
-
    for (int i=0; i<count; i++) writel(data[i], PH_DATA_REG);
-
    status_reg = readl(ST_REG_ADDR);
    if (status_reg.tx_error) return E_TX_ERROR;
-
    return SUCCESS;
 }
 
 int driver_close(const int drv_handle)
 {
    if (!valid_hnd(drv_handle)) return E_NOT_OPEN;
-
    writel(PH_DONE, CTRL_REG_ADDR);
-
    return SUCCESS;
 }
 
